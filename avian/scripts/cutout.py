@@ -42,6 +42,11 @@ def main() -> int:
                          "long side (default: 0.02)")
     ap.add_argument("--force", action="store_true",
                     help="Re-cut illustrations that already have transparency")
+    ap.add_argument("--providers", default="cpu",
+                    help="ONNX execution providers: 'cpu' (default), 'coreml' "
+                         "(Apple GPU/ANE with CPU fallback — note: ORT's CoreML "
+                         "EP stalls on BiRefNet's dynamic-shape ops, so CPU is "
+                         "the reliable choice), or a comma-separated ORT list")
     args = ap.parse_args()
 
     try:
@@ -64,7 +69,19 @@ def main() -> int:
         print("error: no illustrations found", file=sys.stderr)
         return 1
 
-    session = new_session(args.model)
+    provider_aliases = {
+        "coreml": ["CoreMLExecutionProvider", "CPUExecutionProvider"],
+        "cpu": ["CPUExecutionProvider"],
+    }
+    providers = provider_aliases.get(args.providers.lower(),
+                                     [p.strip() for p in args.providers.split(",")])
+    try:
+        session = new_session(args.model, providers=providers)
+    except Exception as e:
+        print(f"warn: providers {providers} failed ({e}); falling back to CPU",
+              file=sys.stderr)
+        session = new_session(args.model, providers=["CPUExecutionProvider"])
+    print(f"rembg session: {args.model} via {providers}")
     done = skipped = 0
     for p in paths:
         im = Image.open(p)
