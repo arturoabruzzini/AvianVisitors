@@ -545,6 +545,28 @@
       b = clusterBounds(placed);
     }
 
+    // Kiosk: the fit loop above only ever shrinks, so a small flock (a couple
+    // of birds) leaves a lot of dead space - wasteful on a tiny e-ink panel.
+    // Scale the packed cluster UP uniformly about its centre until it fills
+    // KIOSK_FILL of the binding dimension. This is a pure geometric scale of
+    // the already-placed tiles (no repack), so the arrangement is preserved
+    // and nothing can overflow as long as KIOSK_FILL <= 1.
+    if (IS_KIOSK) {
+      var KIOSK_FILL = 0.98;
+      var clW0 = b.R - b.L, clH0 = b.B - b.T;
+      var up = Math.min((W * KIOSK_FILL) / clW0, (H * KIOSK_FILL) / clH0);
+      if (up > 1.0001 && isFinite(up)) {
+        var cx0 = (b.L + b.R) / 2, cy0 = (b.T + b.B) / 2;
+        placed.forEach(function (t) {
+          if (t.x < -1000) return;
+          t.x = cx0 + (t.x - cx0) * up;
+          t.y = cy0 + (t.y - cy0) * up;
+          t.fullW *= up; t.fullH *= up;
+        });
+        b = clusterBounds(placed);
+      }
+    }
+
     // Re-centre the cluster in the viewport so a small cluster doesn't
     // drift to one side from the spiral's center-of-mass bias.
     var dx = W / 2 - (b.L + b.R) / 2;
