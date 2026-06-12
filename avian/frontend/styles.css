@@ -114,6 +114,13 @@
   html.kiosk .view:not(#v0) { display: none !important; }
   html.kiosk .view#v0 { padding: 0; }
   html.kiosk .gcollage { max-width: none; }
+  /* Force a pure black/white background so the large flat empty areas don't
+     dither into an ugly texture on a 1-bit e-ink panel. The bird
+     illustrations still dither (they're full-colour art, as intended) - only
+     the page background + plain text are pinned to pure values. Normal mode
+     keeps the warm off-white / charcoal paper tones untouched. */
+  html.kiosk { --paper: #fff; --ink: #000; }
+  html.kiosk[data-theme="dark"] { --paper: #000; --ink: #fff; }
 
   /* ============ Top bar - window picker (left) + menu button (right). ============
      Visible on every view; the picker is the universal time-window control. */
