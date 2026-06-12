@@ -108,6 +108,7 @@
   html.kiosk header.top,
   html.kiosk .static-head,
   html.kiosk .return-to-atlas,
+  html.kiosk #slider,
   html.kiosk #menu-dd { display: none !important; }
   html.kiosk .views { transform: none !important; transition: none !important; }
   html.kiosk .view:not(#v0) { display: none !important; }
