@@ -173,6 +173,13 @@ EOF
 }
 
 install_Caddyfile() {
+  # Find the active PHP-FPM Unix socket. The path is version-specific on
+  # modern Raspberry Pi OS (e.g. /run/php/php8.4-fpm.sock); the generic
+  # /run/php/php-fpm.sock only exists if a compat shim is installed, so
+  # hardcoding it breaks Caddy's php_fastcgi handler on stock Bookworm.
+  FPM_SOCK=$(ls /run/php/php*-fpm.sock 2>/dev/null | head -n1)
+  FPM_SOCK=${FPM_SOCK:-/run/php/php-fpm.sock}
+
   [ -d /etc/caddy ] || mkdir /etc/caddy
   if [ -f /etc/caddy/Caddyfile ];then
     cp /etc/caddy/Caddyfile{,.original}
@@ -208,7 +215,13 @@ http:// ${BIRDNETPI_URL} {
     birdnet ${HASHWORD}
   }
   reverse_proxy /stream localhost:8000
-  php_fastcgi unix//run/php/php-fpm.sock
+  # AvianVisitors overlay drops an index.html alongside BirdNET-Pi's
+  # index.php. The default try_files for php_fastcgi prefers index.php
+  # over index.html, so override it - this is a no-op on stock installs
+  # since EXTRACTED has no index.html there.
+  php_fastcgi unix/${FPM_SOCK} {
+    try_files {path} {path}/index.html {path}/index.php index.php
+  }
   reverse_proxy /log* localhost:8080
   reverse_proxy /stats* localhost:8501
   reverse_proxy /terminal* localhost:8888
@@ -226,7 +239,13 @@ http:// ${BIRDNETPI_URL} {
     file_server browse
   }
   reverse_proxy /stream localhost:8000
-  php_fastcgi unix//run/php/php-fpm.sock
+  # AvianVisitors overlay drops an index.html alongside BirdNET-Pi's
+  # index.php. The default try_files for php_fastcgi prefers index.php
+  # over index.html, so override it - this is a no-op on stock installs
+  # since EXTRACTED has no index.html there.
+  php_fastcgi unix/${FPM_SOCK} {
+    try_files {path} {path}/index.html {path}/index.php index.php
+  }
   reverse_proxy /log* localhost:8080
   reverse_proxy /stats* localhost:8501
   reverse_proxy /terminal* localhost:8888

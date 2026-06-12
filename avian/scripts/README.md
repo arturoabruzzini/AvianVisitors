@@ -17,7 +17,7 @@ pip install -r requirements.txt
 export GEMINI_API_KEY='your-key'
 
 # 1. generate (cream ground) for your region's species
-python3 pregen.py --labels ~/BirdNET-Pi/model/labels.txt --ebird-region US-CA
+python3 pregen.py --labels ~/BirdNET-Pi/model/labels.txt --ebird-region GB
 
 # 2. cut the ground off and crop
 python3 cutout.py
