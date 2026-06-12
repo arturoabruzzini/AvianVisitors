@@ -13,6 +13,21 @@
   var IMG_VERSION = 'r12'; // pruned to East Sussex species; drop cached copies
                            // of removed birds everywhere.
 
+  // ---- Kiosk render mode ----
+  // Loaded as ?kiosk=1 by an external screenshot service (byos_next driving a
+  // TRMNL e-ink panel): strip the UI down to just the collage, take the
+  // time-window (?hours=) and theme (?theme=) from the URL, skip realtime
+  // polling (the panel re-pulls the whole page on its own cadence), and raise
+  // a `data-collage-ready` attribute on <html> once every tile image has
+  // decoded so the screenshotter knows the frame is final.
+  var KIOSK = (function () {
+    try { return new URLSearchParams(location.search); } catch (e) { return new URLSearchParams(); }
+  })();
+  var IS_KIOSK = KIOSK.has('kiosk');
+  function markCollageReady() {
+    document.documentElement.setAttribute('data-collage-ready', '1');
+  }
+
   // ---- Sliding pill helper ----
   // Each segmented control has a single .seg-pill element that we move via
   // transform/width to whichever button currently has aria-current="true".
@@ -144,9 +159,12 @@
   function currentTheme() {
     return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
   }
-  applyTheme(readLS('bird:theme', 'light'));
+  applyTheme(IS_KIOSK ? (KIOSK.get('theme') === 'dark' ? 'dark' : 'light')
+                      : readLS('bird:theme', 'light'));
   var winBtns = [].slice.call(winPick.querySelectorAll('button'));
-  var currentHours = +readLS('bird:window', '24') || 24;
+  var currentHours = (IS_KIOSK && +KIOSK.get('hours'))
+    ? +KIOSK.get('hours')
+    : (+readLS('bird:window', '24') || 24);
   winBtns.forEach(function (b) {
     b.setAttribute('aria-current', (+b.dataset.h === currentHours) ? 'true' : 'false');
   });
@@ -414,6 +432,7 @@
     collage.innerHTML = '';
     if (!items.length) {
       collage.innerHTML = '<p class="empty">no birds heard in this window.</p>';
+      if (IS_KIOSK) markCollageReady(); // nothing to decode; frame is final
       return;
     }
     var W = collage.clientWidth, H = collage.clientHeight;
@@ -559,7 +578,7 @@
       btn.style.top    = r.y + 'px';
       btn.style.width  = r.fullW + 'px';
       btn.style.height = r.fullH + 'px';
-      btn.innerHTML = '<img loading="lazy" decoding="async" src="' + img + '" alt="' + s.com + '">';
+      btn.innerHTML = '<img loading="' + (IS_KIOSK ? 'eager' : 'lazy') + '" decoding="async" src="' + img + '" alt="' + s.com + '">';
       r.el = btn;
       collage.appendChild(btn);
     });
@@ -580,6 +599,19 @@
     // (first load, window change, view switch) - never on the silent 30s
     // poll or a resize, which render without the animate flag.
     if (animate) playCollageEntrance();
+
+    // Kiosk: wait until every tile image has actually decoded, then flag the
+    // frame as final so an external screenshotter captures a complete collage
+    // rather than a half-loaded one. We skip the entrance animation's timing
+    // entirely here - the panel only wants the settled frame.
+    if (IS_KIOSK) {
+      var tileImgs = [].slice.call(collage.querySelectorAll('.gtile img'));
+      Promise.all(tileImgs.map(function (im) {
+        if (im.complete && im.naturalWidth) return Promise.resolve();
+        if (im.decode) return im.decode().catch(function () {});
+        return new Promise(function (res) { im.onload = im.onerror = res; });
+      })).then(markCollageReady);
+    }
   }
 
   // Staggered centre-out entrance: each tile fades + scales in, delayed by
@@ -1391,6 +1423,7 @@
   var POLL_MS = 30 * 1000;
   var pollTimer = null;
   function startPolling() {
+    if (IS_KIOSK) return; // panel re-pulls the page itself; no client polling
     stopPolling();
     pollTimer = setInterval(function () {
       if (document.hidden) return;

@@ -8,8 +8,10 @@
 <link rel="icon" type="image/png" href="./favicon.png">
 <link rel="apple-touch-icon" href="./favicon.png">
 <!-- Apply the saved theme before first paint so dark mode doesn't flash
-     light on load. The full switcher lives in Settings (writes bird:theme). -->
-<script>try{if(localStorage.getItem('bird:theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}catch(e){}</script>
+     light on load. The full switcher lives in Settings (writes bird:theme).
+     ?kiosk=1 (external screenshot mode, e.g. byos_next driving an e-ink
+     panel) takes its theme straight from the URL instead of localStorage. -->
+<script>try{var __sp=new URLSearchParams(location.search);if(__sp.has('kiosk')){document.documentElement.classList.add('kiosk');var __th=__sp.get('theme');if(__th==='dark')document.documentElement.setAttribute('data-theme','dark');else if(__th!=='light'&&localStorage.getItem('bird:theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}else if(localStorage.getItem('bird:theme')==='dark'){document.documentElement.setAttribute('data-theme','dark');}}catch(e){}</script>
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body class="av-local">

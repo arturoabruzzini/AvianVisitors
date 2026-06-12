@@ -100,6 +100,20 @@
   .view#v1 { display: flex; flex-direction: column; }
   @media (max-width: 700px) { .view { padding: 8px 18px 132px; } .view#v0, .view#v1 { padding: 8px 16px 88px; } }
 
+  /* ============ Kiosk render mode (?kiosk=1) ============
+     External screenshot mode (byos_next driving an e-ink panel): show ONLY
+     the collage, edge-to-edge, on the themed paper background. Hide every
+     chrome element and pin the views track to the collage so nothing can
+     slide it out of frame. */
+  html.kiosk header.top,
+  html.kiosk .static-head,
+  html.kiosk .return-to-atlas,
+  html.kiosk #menu-dd { display: none !important; }
+  html.kiosk .views { transform: none !important; transition: none !important; }
+  html.kiosk .view:not(#v0) { display: none !important; }
+  html.kiosk .view#v0 { padding: 0; }
+  html.kiosk .gcollage { max-width: none; }
+
   /* ============ Top bar - window picker (left) + menu button (right). ============
      Visible on every view; the picker is the universal time-window control. */
   .top {
