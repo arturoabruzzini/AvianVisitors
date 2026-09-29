@@ -519,7 +519,9 @@
                                     // portrait cluster stays a bit wider / less tall
     var pad = narrow ? Math.max(1, COLLAGE_PAD - 1) : COLLAGE_PAD;
     if (ROUND) { xBias = 1; yBias = 1; } // a circle, not the landscape ellipse
-    var roundR = RoundFit.circleRadius(W, H, ROUND_FILL);
+    // Only round renders touch RoundFit, so the everyday collage and the TRMNL
+    // kiosk still draw if round-fit.js failed to load.
+    var roundR = ROUND ? RoundFit.circleRadius(W, H, ROUND_FILL) : 0;
     var placed = maskPack(tiles, W, H, xBias, yBias, pad);
 
     // Scale-to-fit: iterate shrink + repack until every tile lands on
