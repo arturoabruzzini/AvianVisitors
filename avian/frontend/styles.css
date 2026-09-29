@@ -122,15 +122,14 @@
   html.kiosk { --paper: #fff; --ink: #000; }
   html.kiosk[data-theme="dark"] { --paper: #000; --ink: #fff; }
   /* ?bg=none: the watch tile / phone widget render. The page is fully
-     transparent - each device draws its own ground behind the birds. A faint
-     light halo stands in for the paper, so black birds (magpie, jackdaw,
-     blackbird) still read on a black watch face. */
+     transparent - each device draws its own ground behind the birds (black on
+     the watch, cream on the phone), and the paper edge below keeps black
+     birds (magpie, jackdaw, blackbird) readable on the watch. */
   html.kiosk.bg-none,
   html.kiosk.bg-none[data-theme="dark"] { --paper: transparent; }
   html.kiosk.bg-none, html.kiosk.bg-none body { background: transparent !important; }
   html.kiosk.bg-none .gtile img {
-    filter: drop-shadow(0 0 1.5px rgba(236,232,225,0.55))
-            drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+    filter: url(#paper-edge) drop-shadow(0 2px 6px rgba(0,0,0,0.35));
   }
   /* ?shape=round: the empty state sits in the middle of the disc, large
      enough to read after the 800px render is shrunk to a 466px watch. */
@@ -138,6 +137,13 @@
     position: absolute; inset: 0; margin: 0; padding: 0 18%;
     display: flex; align-items: center; justify-content: center;
     font-size: 30px; line-height: 1.4; color: var(--ink);
+  }
+  /* The transparent render goes on both a black watch and a cream widget, so
+     the empty message sits on its own paper label, dark ink on cream. */
+  html.kiosk.round.bg-none .gcollage .empty {
+    inset: auto; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: max-content; max-width: 64%; padding: 14px 28px; text-align: center;
+    background: #ecdab9; color: #1a1612; border-radius: 28px;
   }
 
   /* ============ Top bar - window picker (left) + menu button (right). ============
@@ -600,6 +606,17 @@
   }
   .gtile.is-hover img {
     filter: drop-shadow(0 3px 10px rgba(26,22,18,0.26)) saturate(1.1);
+  }
+  /* On charcoal the birds get back an edge of the cream paper they were
+     drawn on (#paper-edge in index.html), so white plumage and black birds
+     keep their outline. The light theme's paper is close enough not to. */
+  :root[data-theme="dark"] .gtile img,
+  :root[data-theme="dark"] .bird-card .img-wrap img,
+  :root[data-theme="dark"] .modal-img img {
+    filter: url(#paper-edge) drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+  }
+  :root[data-theme="dark"] .gtile.is-hover img {
+    filter: url(#paper-edge) drop-shadow(0 3px 10px rgba(0,0,0,0.5)) saturate(1.1);
   }
   /* Hover pill - surfaces the windowed count for the bird under the
      cursor. Confirms (Anna's-hummingbird-is-#1 paranoia) that the

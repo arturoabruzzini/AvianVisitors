@@ -15,6 +15,19 @@
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body class="av-local">
+<!-- The cream paper edge styles.css draws round each bird on a dark ground:
+     the silhouette grown by 3px in the paper the illustrations were drawn on,
+     blurred so it is solid for ~2px and gone by ~5px - inside the gap the
+     collage leaves between birds (tests/test_paper_edge.py). -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <filter id="paper-edge" x="-50%" y="-50%" width="200%" height="200%" color-interpolation-filters="sRGB">
+    <feMorphology in="SourceAlpha" operator="dilate" radius="3" result="grown"/>
+    <feGaussianBlur in="grown" stdDeviation="1" result="soft"/>
+    <feFlood flood-color="#ecdab9"/>
+    <feComposite operator="in" in2="soft" result="edge"/>
+    <feMerge><feMergeNode in="edge"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</svg>
 <!-- Pill in the top-left slot, only visible on admin overlays
      (body.admin-on); CSS in styles.css hides it everywhere else.
      href="/" returns to the collage view via a full reload, which is
