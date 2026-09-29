@@ -333,6 +333,11 @@ EOF
   systemctl enable chart_viewer.service
 }
 
+install_render_timer() {
+  echo "Installing the round collage render timer (watch tile / phone widget)"
+  [ -x $my_dir/avian/render/install.sh ] && $my_dir/avian/render/install.sh
+}
+
 install_gotty_logs() {
   sudo -u ${USER} ln -sf $my_dir/templates/gotty \
     ${HOME}/.gotty
@@ -489,6 +494,7 @@ install_services() {
   install_custom_recording_service # But does not enable
   install_spectrogram_service
   install_chart_viewer_service
+  install_render_timer
   install_gotty_logs
   install_phpsysinfo
   install_livestream_service
