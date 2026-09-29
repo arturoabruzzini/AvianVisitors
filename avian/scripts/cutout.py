@@ -27,6 +27,21 @@ import sys
 from pathlib import Path
 
 
+def preserve_original(render: Path, originals: Path) -> None:
+    """Copy the uncut render to originals/ before it is cut in place.
+
+    The cream-ground render is the only record of the white plumage the
+    matting model removes, and fill_holes.py needs it to put that back.
+    An original already kept is never replaced: after the first cut, the
+    file in illustrations/ is a cutout, not a render.
+    """
+    import shutil
+    originals.mkdir(parents=True, exist_ok=True)
+    kept = originals / render.name
+    if not kept.exists():
+        shutil.copy2(render, kept)
+
+
 def main() -> int:
     here = Path(__file__).resolve().parents[1]
     ap = argparse.ArgumentParser(description=__doc__,
@@ -35,6 +50,9 @@ def main() -> int:
                     help="Slugs to process (e.g. calypte-anna). Default: all.")
     ap.add_argument("--dir", type=Path, default=here / "assets" / "illustrations",
                     help="Illustration directory (default: avian/assets/illustrations/)")
+    ap.add_argument("--originals", type=Path, default=here / "assets" / "originals",
+                    help="Where the uncut renders are kept (default: "
+                         "avian/assets/originals/, git-ignored)")
     ap.add_argument("--model", default="birefnet-general",
                     help="rembg model name (default: birefnet-general)")
     ap.add_argument("--margin", type=float, default=0.02,
@@ -88,6 +106,8 @@ def main() -> int:
         if not args.force and im.mode == "RGBA" and im.getchannel("A").getextrema()[0] == 0:
             skipped += 1
             continue
+        if not (im.mode == "RGBA" and im.getchannel("A").getextrema()[0] == 0):
+            preserve_original(p, args.originals)  # an uncut render, not a --force re-cut
         cut = remove(im.convert("RGB"), session=session)  # RGBA, ground -> transparent
         bbox = cut.getchannel("A").getbbox()
         if bbox:

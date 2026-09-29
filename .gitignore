@@ -57,3 +57,6 @@ whitelist_species_list.txt
 avian/assets/references/
 # Superseded assets retained locally
 avian/assets/_legacy/
+
+# Uncut cream-ground renders (cutout.py input); large, kept local only
+avian/assets/originals/

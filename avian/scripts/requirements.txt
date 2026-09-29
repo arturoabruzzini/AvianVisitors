@@ -1,8 +1,10 @@
 # Image pipeline dependencies for avian/scripts/.
 # pregen.py needs only Pillow (for reference downscaling); it degrades
 # gracefully without it. cutout.py needs rembg + onnxruntime for the
-# BiRefNet matting model. build_masks.py needs Pillow. verify.py is
-# standard-library only.
+# BiRefNet matting model. build_masks.py needs Pillow. fill_holes.py needs
+# numpy + scipy. verify.py is standard-library only.
 Pillow>=10.0
 rembg>=2.0.76
 onnxruntime>=1.16
+numpy>=1.24
+scipy>=1.10
