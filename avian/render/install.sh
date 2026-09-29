@@ -18,6 +18,8 @@ Type=oneshot
 User=$RUN_USER
 Environment=HOME=$RUN_HOME
 Nice=10
+# Backstop for render-round.sh's own 60 s timeout.
+TimeoutStartSec=120
 ExecStart=$RENDER_DIR/render-round.sh
 UNIT
 

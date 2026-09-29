@@ -11,6 +11,9 @@ set -euo pipefail
 
 OUT="${1:-$HOME/BirdSongs/Extracted/tile/birds-round.png}"
 EXTRA="${2:-}"
+# A hung Chromium must not wedge the oneshot unit: the timer only re-fires once
+# the last run has finished.
+RENDER_TIMEOUT="${RENDER_TIMEOUT:-60}"
 URL="http://localhost/?kiosk=1&shape=round&bg=none&theme=dark&hours=12${EXTRA:+&$EXTRA}"
 
 mkdir -p "$(dirname "$OUT")"
@@ -19,7 +22,7 @@ trap 'rm -f "$tmp"' EXIT
 
 start=$(date +%s)
 # The background colour must be hex RGBA: Chromium rejects a bare 0.
-chromium-headless-shell --screenshot="$tmp" --window-size=800,800 \
+timeout "$RENDER_TIMEOUT" chromium-headless-shell --screenshot="$tmp" --window-size=800,800 \
   --default-background-color=00000000 --hide-scrollbars --virtual-time-budget=8000 \
   "$URL" >/dev/null 2>&1
 
