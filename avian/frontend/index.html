@@ -11,7 +11,7 @@
      light on load. The full switcher lives in Settings (writes bird:theme).
      ?kiosk=1 (external screenshot mode, e.g. byos_next driving an e-ink
      panel) takes its theme straight from the URL instead of localStorage. -->
-<script>try{var __sp=new URLSearchParams(location.search);if(__sp.has('kiosk')){document.documentElement.classList.add('kiosk');var __th=__sp.get('theme');if(__th==='dark')document.documentElement.setAttribute('data-theme','dark');else if(__th!=='light'&&localStorage.getItem('bird:theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}else if(localStorage.getItem('bird:theme')==='dark'){document.documentElement.setAttribute('data-theme','dark');}}catch(e){}</script>
+<script>try{var __sp=new URLSearchParams(location.search);if(__sp.has('kiosk')){document.documentElement.classList.add('kiosk');if(__sp.get('shape')==='round')document.documentElement.classList.add('round');if(__sp.get('bg')==='none')document.documentElement.classList.add('bg-none');var __th=__sp.get('theme');if(__th==='dark')document.documentElement.setAttribute('data-theme','dark');else if(__th!=='light'&&localStorage.getItem('bird:theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}else if(localStorage.getItem('bird:theme')==='dark'){document.documentElement.setAttribute('data-theme','dark');}}catch(e){}</script>
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body class="av-local">
@@ -215,6 +215,7 @@
   </div>
 </section>
 
+<script src="./avian/frontend/round-fit.js"></script>
 <script src="./apt.js"></script>
 </body>
 </html>

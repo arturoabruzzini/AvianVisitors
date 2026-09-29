@@ -121,6 +121,24 @@
      keeps the warm off-white / charcoal paper tones untouched. */
   html.kiosk { --paper: #fff; --ink: #000; }
   html.kiosk[data-theme="dark"] { --paper: #000; --ink: #fff; }
+  /* ?bg=none: the watch tile / phone widget render. The page is fully
+     transparent - each device draws its own ground behind the birds. A faint
+     light halo stands in for the paper, so black birds (magpie, jackdaw,
+     blackbird) still read on a black watch face. */
+  html.kiosk.bg-none,
+  html.kiosk.bg-none[data-theme="dark"] { --paper: transparent; }
+  html.kiosk.bg-none, html.kiosk.bg-none body { background: transparent !important; }
+  html.kiosk.bg-none .gtile img {
+    filter: drop-shadow(0 0 1.5px rgba(236,232,225,0.55))
+            drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+  }
+  /* ?shape=round: the empty state sits in the middle of the disc, large
+     enough to read after the 800px render is shrunk to a 466px watch. */
+  html.kiosk.round .gcollage .empty {
+    position: absolute; inset: 0; margin: 0; padding: 0 18%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px; line-height: 1.4; color: var(--ink);
+  }
 
   /* ============ Top bar - window picker (left) + menu button (right). ============
      Visible on every view; the picker is the universal time-window control. */

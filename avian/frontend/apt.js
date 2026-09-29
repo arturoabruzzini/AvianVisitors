@@ -27,6 +27,13 @@
   function markCollageReady() {
     document.documentElement.setAttribute('data-collage-ready', '1');
   }
+  // Round render (the watch tile / phone widget): birds packed inside the
+  // inscribed circle, measured to their outlines - see round-fit.js.
+  var ROUND = IS_KIOSK && KIOSK.get('shape') === 'round';
+  var ROUND_FILL = 0.96; // leaves room for the halo + drop shadow inside the disc
+  // ?demo=N renders N synthetic birds instead of live data, so the round
+  // layout can be checked at 0 / 6 / 30 birds whatever the garden is doing.
+  var DEMO_N = IS_KIOSK && KIOSK.has('demo') ? Math.max(0, +KIOSK.get('demo') || 0) : -1;
 
   // ---- Sliding pill helper ----
   // Each segmented control has a single .seg-pill element that we move via
@@ -354,8 +361,11 @@
       }
     }
     function offGrid(tile, tx, ty) {
-      // True if the rendered tile bbox extends past the viewport.
-      return tx < 0 || ty < 0 || tx + tile.fullW > W || ty + tile.fullH > H;
+      // True if the rendered tile bbox extends past the viewport - or, in a
+      // round render, if any of its outline leaves the circle.
+      if (tx < 0 || ty < 0 || tx + tile.fullW > W || ty + tile.fullH > H) return true;
+      return ROUND && RoundFit.tileRadius(tile, tx, ty, W / 2, H / 2) >
+                      RoundFit.circleRadius(W, H, ROUND_FILL);
     }
 
     var cx = W / 2, cy = H / 2;
@@ -508,6 +518,8 @@
     var yBias = narrow ? 1.7 : 1;   // gentler than the desktop bias so the
                                     // portrait cluster stays a bit wider / less tall
     var pad = narrow ? Math.max(1, COLLAGE_PAD - 1) : COLLAGE_PAD;
+    if (ROUND) { xBias = 1; yBias = 1; } // a circle, not the landscape ellipse
+    var roundR = RoundFit.circleRadius(W, H, ROUND_FILL);
     var placed = maskPack(tiles, W, H, xBias, yBias, pad);
 
     // Scale-to-fit: iterate shrink + repack until every tile lands on
@@ -529,12 +541,15 @@
     var b = clusterBounds(placed);
     for (var iter = 0; iter < 10; iter++) {
       var missing  = placed.some(function (t) { return t.x < -1000; });
-      var overflow = b.L < 0 || b.T < 0 || b.R > W || b.B > H;
+      var overflow = ROUND ? RoundFit.clusterRadius(placed, W / 2, H / 2) > roundR
+                           : (b.L < 0 || b.T < 0 || b.R > W || b.B > H);
       if (!missing && !overflow) break;
       // Base 0.93 linear shrink (≈ 0.86 area). If overflow, take the
       // tighter of cluster-to-viewport ratios so we converge fast.
       var scale = 0.93;
-      if (overflow) {
+      if (overflow && ROUND) {
+        scale = Math.min(scale, roundR / RoundFit.clusterRadius(placed, W / 2, H / 2));
+      } else if (overflow) {
         var clW = b.R - b.L, clH = b.B - b.T;
         var sx = (W * 0.96) / Math.max(clW, W * 0.96);
         var sy = (H * 0.94) / Math.max(clH, H * 0.94);
@@ -551,7 +566,12 @@
     // KIOSK_FILL of the binding dimension. This is a pure geometric scale of
     // the already-placed tiles (no repack), so the arrangement is preserved
     // and nothing can overflow as long as KIOSK_FILL <= 1.
-    if (IS_KIOSK) {
+    if (ROUND) {
+      // Scale about the circle's centre until the outline touches roundR -
+      // up for a small flock, down if the fit loop ran out of iterations.
+      RoundFit.scaleToRadius(placed, W / 2, H / 2, roundR);
+      b = clusterBounds(placed);
+    } else if (IS_KIOSK) {
       var KIOSK_FILL = 0.98;
       var clW0 = b.R - b.L, clH0 = b.B - b.T;
       var up = Math.min((W * KIOSK_FILL) / clW0, (H * KIOSK_FILL) / clH0);
@@ -571,7 +591,10 @@
     // drift to one side from the spiral's center-of-mass bias.
     var dx = W / 2 - (b.L + b.R) / 2;
     var dy = H / 2 - (b.T + b.B) / 2;
-    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+    // Not in a round render: the packer grows from the circle's centre and the
+    // scale above is about that centre, so a bbox re-centre would push
+    // outlines past the rim.
+    if (!ROUND && (Math.abs(dx) > 1 || Math.abs(dy) > 1)) {
       placed.forEach(function (t) { if (t.x > -1000) { t.x += dx; t.y += dy; } });
     }
 
@@ -833,8 +856,17 @@
   // changes, refreshRecent() refetches and re-renders. Empty state shows
   // a "no detections in this window" message.
   function renderCollageFromData(animate) {
-    var items = (DATA.recent && DATA.recent.species) || [];
+    var items = DEMO_N >= 0 ? demoItems(DEMO_N)
+                            : (DATA.recent && DATA.recent.species) || [];
     renderCollage(items, animate);
+  }
+  function demoItems(n) {
+    return Object.keys(DIMS).filter(function (k) { return !/-2$/.test(k); })
+      .slice(0, n).map(function (slug, i) {
+        var p = slug.split('-');
+        var sci = p[0][0].toUpperCase() + p[0].slice(1) + ' ' + p.slice(1).join(' ');
+        return { sci: sci, com: sci, n: Math.round(Math.pow(0.7, i) * 200) + 1 };
+      });
   }
   var rTimer;
   window.addEventListener('resize', function () {
