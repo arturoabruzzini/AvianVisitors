@@ -129,7 +129,7 @@
   html.kiosk.bg-none[data-theme="dark"] { --paper: transparent; }
   html.kiosk.bg-none, html.kiosk.bg-none body { background: transparent !important; }
   html.kiosk.bg-none .gtile img {
-    filter: url(#paper-edge) drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+    filter: url(#paper-edge);
   }
   /* ?shape=round: the empty state sits in the middle of the disc, large
      enough to read after the 800px render is shrunk to a 466px watch. */
@@ -613,10 +613,10 @@
   :root[data-theme="dark"] .gtile img,
   :root[data-theme="dark"] .bird-card .img-wrap img,
   :root[data-theme="dark"] .modal-img img {
-    filter: url(#paper-edge) drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+    filter: url(#paper-edge);
   }
   :root[data-theme="dark"] .gtile.is-hover img {
-    filter: url(#paper-edge) drop-shadow(0 3px 10px rgba(0,0,0,0.5)) saturate(1.1);
+    filter: url(#paper-edge) saturate(1.1);
   }
   /* Hover pill - surfaces the windowed count for the bird under the
      cursor. Confirms (Anna's-hummingbird-is-#1 paranoia) that the
