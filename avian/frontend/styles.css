@@ -9,6 +9,8 @@
     --accent:   #4a3f31;   /* warm dark grey - matches ink-2, no longer red */
     --accent-2: #1a1612;   /* near-black ink - same hue as the title text */
     --hairline: rgba(26,22,18,0.14);  /* faint divider lines + chart gridlines */
+    --faint:    rgba(26,22,18,0.05);  /* row rules, minor gridlines */
+    --night:    rgba(26,22,18,0.035); /* timeline shading between sunset and sunrise */
     --pill:     #fcfcfb;              /* active-toggle sliding pill */
     /* Depth shadow recipes - replace flat 1px borders */
     --edge:    inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 0 1px rgba(26,22,18,0.04);
@@ -34,6 +36,8 @@
     --accent:   #d8d2c6;   /* light warm - pills read light-on-dark */
     --accent-2: #ece8e1;
     --hairline: rgba(236,232,225,0.20);  /* faint light divider on charcoal */
+    --faint:    rgba(236,232,225,0.06);
+    --night:    rgba(0,0,0,0.22);
     --pill:     #3a3e48;                 /* raised, clearly lighter than the track */
     --edge:    inset 0 0 0 1px rgba(255,255,255,0.05), 0 0 0 1px rgba(0,0,0,0.4);
     --edge-lg: inset 0 0 0 1px rgba(255,255,255,0.06), 0 0 0 1px rgba(0,0,0,0.5), 0 10px 30px rgba(0,0,0,0.5);
@@ -1022,6 +1026,133 @@
   .atlas-empty p.hint {
     font: 10px ui-monospace, Menlo, monospace; color: var(--ink-soft);
     letter-spacing: 0.06em;
+  }
+
+  /* ============ View 4 - Timeline ============
+     One row per species, time running left to right across the window.
+     Each visit (a run of one species' detections with no gap over 5 min,
+     grouped by the API) is an ink bar - the stats squares stretched over
+     the time they lasted. Night (sunset to sunrise) is a faint band behind
+     every row. Scrolls vertically like the atlas; on phones the plot keeps
+     a minimum width and scrolls sideways inside its own container. */
+  .lanes { max-width: 1180px; margin: 0 auto; }
+  .lanes-bar {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    gap: 12px; margin-bottom: 14px;
+  }
+  .lanes-cap h3 {
+    font: 700 10px ui-monospace, Menlo, monospace; color: var(--ink);
+    letter-spacing: 0.18em; text-transform: uppercase; margin: 0 0 1px;
+    border-left: 2px solid var(--accent); padding-left: 10px;
+  }
+  .lanes-cap small {
+    display: block; font: 9px ui-monospace, Menlo, monospace; color: var(--ink-soft);
+    letter-spacing: 0.06em; margin: 0 0 0 12px;
+  }
+  /* Room below the sort control for its hover tip. */
+  #lanesSort .tip { z-index: 5; }
+  .lanes-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-top: 18px; }
+  /* overflow: hidden keeps a bar at "now" (min-width 3px) or the
+     crosshair's time label at either edge from pushing out a scrollbar. */
+  .lanes-grid { --gut: 210px; position: relative; min-width: 640px; overflow: hidden; }
+  .lanes-axis { position: relative; height: 22px; margin-left: var(--gut); }
+  .lanes-axis span {
+    position: absolute; bottom: 7px; transform: translateX(-50%);
+    font: 8px/1 "SF Mono", Menlo, monospace; color: var(--ink-soft); white-space: nowrap;
+  }
+  .lanes-axis span.day { font: italic 11px/1 ui-serif, "Iowan Old Style", Georgia, serif; color: var(--ink); }
+  .lanes-axis.bottom { height: 26px; }
+  .lanes-axis.bottom span {
+    bottom: auto; top: 8px;
+    font-size: 7.5px; letter-spacing: 0.1em; text-transform: uppercase;
+  }
+  .lanes-body { position: relative; }
+  .lanes-bg { position: absolute; top: 0; bottom: 0; left: var(--gut); right: 0; pointer-events: none; }
+  .lanes-bg .night { position: absolute; top: 0; bottom: 0; background: var(--night); }
+  .lanes-bg .grid { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--faint); }
+  .lanes-bg .grid.major { background: var(--hairline); }
+  .lane {
+    display: grid; grid-template-columns: var(--gut) minmax(0, 1fr); align-items: center;
+    height: 38px; position: relative;
+    box-shadow: inset 0 -1px 0 var(--faint);
+    transition: background 140ms ease;
+  }
+  .lane:hover { background: var(--paper-2); }
+  .lane-id {
+    display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 8px; align-items: center;
+    height: 100%; padding-right: 14px; cursor: pointer;
+    background: none; border: 0; text-align: left; color: var(--ink);
+  }
+  .lane-id img {
+    width: 40px; height: 30px; object-fit: contain; display: block;
+    filter: drop-shadow(0 1px 3px rgba(26,22,18,0.10));
+  }
+  :root[data-theme="dark"] .lane-id img { filter: url(#paper-edge); }
+  .lane-id b {
+    font: 600 12.5px/1.15 ui-serif, "Iowan Old Style", Georgia, serif;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .lane-id .ct {
+    font: 11px ui-monospace, Menlo, monospace; color: var(--ink-soft);
+    font-variant-numeric: tabular-nums;
+  }
+  .lane-plot { position: relative; height: 100%; }
+  /* Paper side borders, as on the stats squares, so visits that nearly
+     touch still read as separate bars. */
+  .lane-mark {
+    position: absolute; top: 50%; height: 14px; min-width: 3px;
+    transform: translateY(-50%);
+    background: var(--ink); border-radius: 1px; cursor: pointer;
+    border-left: 1px solid var(--paper); border-right: 1px solid var(--paper);
+    transition: transform 130ms ease, background 130ms ease;
+  }
+  .lane-mark:hover { background: var(--accent); transform: translateY(-50%) scaleY(1.35); }
+  /* A single call draws 3px wide - too thin for a finger. Pad the hit
+     area without changing what's drawn. */
+  .lane-mark::after { content: ''; position: absolute; inset: -12px -6px; }
+  .lanes-crosshair {
+    position: absolute; top: 0; bottom: 0; width: 1px; z-index: 3;
+    background: var(--ink-2); opacity: 0; pointer-events: none;
+  }
+  .lanes-crosshair span {
+    position: absolute; top: -17px; left: 50%; transform: translateX(-50%);
+    font: 8.5px/1 "SF Mono", Menlo, monospace; color: var(--paper);
+    background: var(--ink); padding: 3px 6px; border-radius: 3px; white-space: nowrap;
+  }
+  .lanes-body.tracking .lanes-crosshair { opacity: 0.6; }
+  .lanes-empty {
+    padding: 100px 0; text-align: center;
+    font: 11px ui-monospace, Menlo, monospace; color: var(--ink-soft);
+    text-transform: lowercase; letter-spacing: 0.18em;
+  }
+  /* Hover pill - the collage tip's recipe, following the pointer. */
+  .lanes-tip {
+    position: fixed; z-index: 40; pointer-events: none;
+    transform: translate(-50%, calc(-100% - 12px));
+    padding: 6px 14px; background: var(--paper); border-radius: 999px;
+    box-shadow: 0 6px 18px rgba(26,22,18,0.12), inset 0 0 0 1px rgba(255,255,255,0.6);
+    font: italic 13px/1.3 ui-serif, "Iowan Old Style", Georgia, serif;
+    color: var(--ink); white-space: nowrap;
+    opacity: 0; transition: opacity 120ms ease;
+  }
+  .lanes-tip[aria-hidden="false"] { opacity: 1; }
+  .lanes-tip .ct-name { font-style: normal; font-weight: 600; }
+  .lanes-tip .ct-w { font: normal 10px ui-monospace, Menlo, monospace; color: var(--ink-soft); margin-left: 6px; }
+  .lane.entering { animation: stats-fade-in 340ms ease backwards; }
+  @media (prefers-reduced-motion: reduce) { .lane.entering { animation: none; } }
+  @media (max-width: 700px) {
+    .lanes-grid { --gut: 132px; }
+    .lane-id { grid-template-columns: 30px minmax(0, 1fr); }
+    .lane-id img { width: 30px; height: 24px; }
+    .lane-id .ct { display: none; }
+    .lane-id b { font-size: 11px; }
+  }
+
+  /* Recordings narrowed to one timeline visit: the count line carries a
+     "show all" link back to the species' full list. */
+  .modal-recordings .rec-count button {
+    background: none; border: 0; padding: 0; margin-left: 6px; cursor: pointer;
+    font: inherit; color: var(--ink); text-decoration: underline; text-underline-offset: 2px;
   }
 
   /* ============ Admin screen (system / logs / tools) ============

@@ -12,7 +12,7 @@
      ?kiosk=1 (external screenshot mode, e.g. byos_next driving an e-ink
      panel) takes its theme straight from the URL instead of localStorage. -->
 <script>try{var __sp=new URLSearchParams(location.search);if(__sp.has('kiosk')){document.documentElement.classList.add('kiosk');if(__sp.get('shape')==='round')document.documentElement.classList.add('round');if(__sp.get('bg')==='none')document.documentElement.classList.add('bg-none');var __th=__sp.get('theme');if(__th==='dark')document.documentElement.setAttribute('data-theme','dark');else if(__th!=='light'&&localStorage.getItem('bird:theme')==='dark')document.documentElement.setAttribute('data-theme','dark');}else if(localStorage.getItem('bird:theme')==='dark'){document.documentElement.setAttribute('data-theme','dark');}}catch(e){}</script>
-<link rel="stylesheet" href="./styles.css">
+<link rel="stylesheet" href="./styles.css?v=20260930">
 </head>
 <body class="av-local">
 <!-- The cream paper edge styles.css draws round each bird on a dark ground:
@@ -133,8 +133,49 @@
       <div class="atlas-grid" id="atlasGrid"></div>
     </section>
 
+    <!-- ========== View 4 - Timeline ========== -->
+    <section class="view" id="v3" aria-label="Timeline">
+      <div class="lanes">
+        <div class="lanes-bar">
+          <div class="lanes-cap">
+            <h3>Visits by species</h3>
+            <small id="lanesSummary">each bar is one visit</small>
+          </div>
+          <div class="atlas-sort" id="lanesSort" role="tablist" aria-label="order species">
+            <i class="seg-pill" aria-hidden="true"></i>
+            <button data-sort="first" type="button" aria-current="true" aria-label="first heard">
+              <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <path d="M2 3 H6"/><path d="M4 7 H9"/><path d="M7 11 H12"/>
+              </svg>
+              <span class="tip">first heard</span>
+            </button>
+            <button data-sort="recent" type="button" aria-label="most recent">
+              <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="7" cy="7" r="5.2"/><path d="M7 4 V7 L9.2 8.3"/>
+              </svg>
+              <span class="tip">most recent</span>
+            </button>
+            <button data-sort="count" type="button" aria-label="most heard">
+              <svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <path d="M2 12 V8"/><path d="M6 12 V5"/><path d="M10 12 V3"/>
+              </svg>
+              <span class="tip">most heard</span>
+            </button>
+          </div>
+        </div>
+        <div class="lanes-scroll">
+          <!-- One row per species, time left to right across the window.
+               Hard-rendered by renderTimeline(). -->
+          <div class="lanes-grid" id="lanesGrid"></div>
+        </div>
+      </div>
+    </section>
+
   </div>
 </main>
+<!-- Timeline hover pill. Outside .views: its transform would make
+     position:fixed relative to the sliding track. -->
+<div class="lanes-tip" id="lanesTip" aria-hidden="true"></div>
 
 <div id="detail-modal" aria-hidden="true" role="dialog" aria-labelledby="modalCommon">
   <div class="modal-backdrop" data-close="1"></div>
@@ -214,6 +255,7 @@
   <button type="button" data-i="0" aria-current="true">collage</button>
   <button type="button" data-i="1">stats</button>
   <button type="button" data-i="2">atlas</button>
+  <button type="button" data-i="3">timeline</button>
 </nav>
 
 
@@ -229,6 +271,6 @@
 </section>
 
 <script src="./avian/frontend/round-fit.js"></script>
-<script src="./apt.js"></script>
+<script src="./apt.js?v=20260930"></script>
 </body>
 </html>

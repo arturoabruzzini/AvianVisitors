@@ -78,7 +78,7 @@
   // Each view's title text. The shared static-head shows one of these
   // based on the current view; identical adjacent values mean the title
   // stays put with no fade (collage and stats both say Heard Recently).
-  var VIEW_TITLES = ['Heard Recently', 'Heard Recently', 'Avian Visitors'];
+  var VIEW_TITLES = ['Heard Recently', 'Heard Recently', 'Avian Visitors', 'Who Sang When'];
   var staticHead = document.querySelector('.static-head');
   var staticTitle = document.getElementById('staticTitle');
   function setTitleForView(i) {
@@ -107,7 +107,7 @@
   var STATS_LEAD = SLIDE_MS - 200;    // stats - begin a touch sooner
   var currentView = 0;                // collage shows first (no go() needed)
   function go(i) {
-    i = Math.max(0, Math.min(2, i));
+    i = Math.max(0, Math.min(btns.length - 1, i));
     // Only a genuine view *switch* replays the entrance. go() also fires when
     // a card is expanded (it sets the #sci= hash, which routes through go(2))
     // while already on the atlas - that must not retrigger the load-in.
@@ -123,6 +123,7 @@
     if (i === 0) playCollageEntrance();
     else if (i === 1) playStatsEntrance(STATS_LEAD);
     else if (i === 2) playAtlasEntrance(SWITCH_LEAD);
+    else if (i === 3) playTimelineEntrance(SWITCH_LEAD);
   }
   btns.forEach(function (b) { b.addEventListener('click', function () { go(+b.dataset.i); }); });
 
@@ -205,12 +206,28 @@
     });
   });
 
+  // Timeline row order - same control, same persistence.
+  var lanesSortEl = document.getElementById('lanesSort');
+  var lanesSortBtns = lanesSortEl ? [].slice.call(lanesSortEl.querySelectorAll('button')) : [];
+  var lanesSort = readLS('bird:lanesSort', 'first');
+  lanesSortBtns.forEach(function (b) {
+    b.setAttribute('aria-current', (b.dataset.sort === lanesSort) ? 'true' : 'false');
+    b.addEventListener('click', function () {
+      lanesSortBtns.forEach(function (x) { x.setAttribute('aria-current', x === b ? 'true' : 'false'); });
+      lanesSort = b.dataset.sort;
+      writeLS('bird:lanesSort', lanesSort);
+      syncPill(lanesSortEl);
+      renderTimeline(true);
+    });
+  });
+
   // Open-space click advances these segmented toggles to the next option.
   wireToggleAdvance(slider);
   wireToggleAdvance(winPick);
   wireToggleAdvance(atlasSortEl);
+  wireToggleAdvance(lanesSortEl);
   wireToggleAdvance(document.getElementById('modalPoseToggle'));
-  function syncAllPills() { syncPill(slider); syncPill(winPick); if (atlasSortEl) syncPill(atlasSortEl); }
+  function syncAllPills() { syncPill(slider); syncPill(winPick); if (atlasSortEl) syncPill(atlasSortEl); if (lanesSortEl) syncPill(lanesSortEl); }
   // The buttons size from text content; wait for fonts so width is correct.
   if (document.fonts && document.fonts.ready) {
     document.fonts.ready.then(syncAllPills);
@@ -915,6 +932,7 @@
     timeseries: null,   // ./avian/api/birdnet-api.php?action=timeseries (daily + hourly aggregates)
     firstseen: null,    // ./avian/api/birdnet-api.php?action=firstseen (newest lifelist additions)
     recent: null,       // ./avian/api/birdnet-api.php?action=recent&hours=N (refetched on picker change)
+    visits: null,       // ./avian/api/birdnet-api.php?action=visits&hours=N (timeline; refetched with recent)
   };
 
   // Derived chart arrays, backfilled so 30 buckets always exist.
@@ -1408,6 +1426,192 @@
     if (animate) playAtlasEntrance();
   }
 
+  // ---- Timeline: who sang when ----
+  // One row per species, time left to right across the window; each visit
+  // (the API groups a species' detections with no gap over 5 min) is an
+  // ink bar from its first to its last call. Times come from the API as
+  // naive local wall-clock seconds, so they're read back with getUTC*.
+  var lanesGridEl = document.getElementById('lanesGrid');
+  var TL = null;   // the model the current render drew, for hover + click
+  function tlDate(sec) { return new Date(sec * 1000); }
+  function tlHM(sec) { var d = tlDate(sec); return pad(d.getUTCHours()) + ':' + pad(d.getUTCMinutes()); }
+  function tlDay(sec) {
+    return tlDate(sec).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', timeZone: 'UTC' });
+  }
+  function tlDayMonth(sec) {
+    return tlDate(sec).toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  }
+  // 'YYYY-MM-DD HH:MM:SS', the form the species endpoint's from/to take.
+  function tlStamp(sec) { return tlDate(sec).toISOString().slice(0, 19).replace('T', ' '); }
+  // Axis ticks: the finest step that keeps the axis to about ten labels.
+  // Steps of a day or more sit on midnight and are labelled with the date.
+  function tlTicks(t0, t1) {
+    var span = t1 - t0;
+    var steps = [600, 1800, 3600, 7200, 10800, 21600, 86400, 2 * 86400, 7 * 86400, 14 * 86400, 28 * 86400];
+    var step = steps[steps.length - 1];
+    for (var i = 0; i < steps.length; i++) { if (span / steps[i] <= 10) { step = steps[i]; break; } }
+    var out = [];
+    for (var t = Math.ceil(t0 / step) * step; t <= t1; t += step) {
+      // A label centred on either edge would be half cut off.
+      var f = (t - t0) / span;
+      if (f < 0.02 || f > 0.97) continue;
+      var label = step < 86400 ? tlHM(t) : (step === 86400 ? tlDay(t) : tlDayMonth(t));
+      out.push({ t: t, label: label, day: step >= 86400 });
+    }
+    return out;
+  }
+  function renderTimeline(animate) {
+    if (!lanesGridEl) return;
+    var V = DATA.visits;
+    var summaryEl = document.getElementById('lanesSummary');
+    if (!V || !V.visits || !V.visits.length) {
+      TL = null;
+      lanesGridEl.innerHTML = '<div class="lanes-empty">' + (V ? 'no detections in this window' : 'loading...') + '</div>';
+      if (summaryEl) summaryEl.textContent = 'each bar is one visit';
+      return;
+    }
+    var now = V.now;
+    var visits = V.visits;
+    var t0 = now - V.hours * 3600;
+    if (V.hours >= 1000000) {
+      // ALL: start from the first detection, with a little air before it.
+      var first = visits.reduce(function (m, v) { return Math.min(m, v[1]); }, now);
+      t0 = first - Math.max(3600, (now - first) * 0.01);
+    }
+    var span = Math.max(60, now - t0);
+    function x(t) { return ((t - t0) / span * 100).toFixed(3); }
+
+    var per = {}, total = 0;
+    visits.forEach(function (v, j) {
+      var p = per[v[0]] || (per[v[0]] = { sp: v[0], n: 0, first: v[1], last: v[1] + v[2], marks: [] });
+      p.n += v[3]; total += v[3];
+      p.first = Math.min(p.first, v[1]); p.last = Math.max(p.last, v[1] + v[2]);
+      p.marks.push(j);
+    });
+    var rows = Object.keys(per).map(function (k) { return per[k]; });
+    if (lanesSort === 'recent') rows.sort(function (a, b) { return b.last - a.last; });
+    else if (lanesSort === 'count') rows.sort(function (a, b) { return b.n - a.n; });
+    else rows.sort(function (a, b) { return a.first - b.first; });
+
+    var ticks = tlTicks(t0, now);
+    var bg = '';
+    // Night bands between one day's sunset and the next sunrise. Only up
+    // to a week - beyond that they blur into stripes.
+    var sun = V.sun || [];
+    if (span <= 8 * 86400) {
+      for (var i = 0; i + 1 < sun.length; i++) {
+        var a = Math.max(sun[i][1], t0), b = Math.min(sun[i + 1][0], now);
+        if (b > a) bg += '<i class="night" style="left:' + x(a) + '%;width:' + (x(b) - x(a)).toFixed(3) + '%"></i>';
+      }
+    }
+    ticks.forEach(function (tk) { bg += '<i class="grid' + (tk.day ? ' major' : '') + '" style="left:' + x(tk.t) + '%"></i>'; });
+    var top = ticks.map(function (tk) {
+      return '<span' + (tk.day ? ' class="day"' : '') + ' style="left:' + x(tk.t) + '%">' + tk.label + '</span>';
+    }).join('');
+    // Sunrise / sunset under the plot when the window is a day or so.
+    var bottom = '';
+    if (span <= 36 * 3600) {
+      sun.forEach(function (s) {
+        [[s[0], 'sunrise'], [s[1], 'sunset']].forEach(function (e) {
+          if (e[0] > t0 && e[0] < now) bottom += '<span style="left:' + x(e[0]) + '%">' + e[1] + ' ' + tlHM(e[0]) + '</span>';
+        });
+      });
+    }
+    var lanes = rows.map(function (p) {
+      var sci = V.species[p.sp][0], com = V.species[p.sp][1];
+      var marks = p.marks.map(function (j) {
+        var v = visits[j];
+        return '<i class="lane-mark" data-v="' + j + '" style="left:' + x(v[1]) + '%;width:' + (v[2] / span * 100).toFixed(3) + '%"></i>';
+      }).join('');
+      return '<div class="lane">'
+        + '<button type="button" class="lane-id" data-lane="' + p.sp + '" aria-label="' + com + ', ' + p.n + ' detections">'
+        +   '<img src="' + sketchSrc(sci, 1) + '" alt="" loading="lazy"><b>' + com + '</b><span class="ct">' + fmtN(p.n) + '</span>'
+        + '</button>'
+        + '<div class="lane-plot">' + marks + '</div>'
+        + '</div>';
+    }).join('');
+
+    TL = { V: V, t0: t0, span: span };
+    lanesGridEl.innerHTML =
+        '<div class="lanes-axis">' + top + '</div>'
+      + '<div class="lanes-body" id="lanesBody"><div class="lanes-bg">' + bg
+      +   '<i class="lanes-crosshair" id="lanesCrosshair"><span></span></i></div>' + lanes + '</div>'
+      + '<div class="lanes-axis bottom">' + bottom + '</div>';
+    if (summaryEl) {
+      summaryEl.textContent = fmtN(total) + ' detections · ' + rows.length + ' species · '
+        + visits.length + ' visits · a new bar after ' + Math.round((V.gap || 300) / 60) + ' min quiet';
+    }
+    if (animate) playTimelineEntrance();
+  }
+  function tlVisitLabel(v) {
+    var when = v[2] >= 60 ? tlHM(v[1]) + '–' + tlHM(v[1] + v[2]) : tlHM(v[1]);
+    return (TL.span > 36 * 3600 ? tlDay(v[1]) + ' ' : '') + when;
+  }
+  // Rows fade in top to bottom, like the atlas rows.
+  var timelineEntranceT = null;
+  function playTimelineEntrance(lead) {
+    if (!lanesGridEl) return;
+    lead = lead || 0;
+    var rows = [].slice.call(lanesGridEl.querySelectorAll('.lane'));
+    clearTimeout(timelineEntranceT);
+    rows.forEach(function (r, i) {
+      r.classList.remove('entering');
+      r.style.animationDelay = Math.round(lead + Math.min(i, 30) * 22) + 'ms';
+    });
+    void lanesGridEl.offsetWidth;
+    rows.forEach(function (r) { r.classList.add('entering'); });
+    timelineEntranceT = setTimeout(function () {
+      rows.forEach(function (r) { r.classList.remove('entering'); r.style.animationDelay = ''; });
+    }, lead + 30 * 22 + 400);
+  }
+  (function wireTimeline() {
+    if (!lanesGridEl) return;
+    var tip = document.getElementById('lanesTip');
+    function hideTip() { tip.setAttribute('aria-hidden', 'true'); }
+    lanesGridEl.addEventListener('mousemove', function (ev) {
+      var body = document.getElementById('lanesBody');
+      if (!TL || !body) return;
+      var bgEl = body.querySelector('.lanes-bg');
+      var r = bgEl.getBoundingClientRect();
+      var f = (ev.clientX - r.left) / r.width;
+      var inside = f >= 0 && f <= 1 && ev.clientY >= r.top && ev.clientY <= r.bottom;
+      body.classList.toggle('tracking', inside);
+      if (inside) {
+        var xh = document.getElementById('lanesCrosshair');
+        var t = TL.t0 + f * TL.span;
+        xh.style.left = (f * 100) + '%';
+        xh.firstChild.textContent = (TL.span > 36 * 3600 ? tlDay(t) + ' ' : '') + tlHM(t);
+      }
+      var m = ev.target.closest('.lane-mark');
+      if (!m) return hideTip();
+      var v = TL.V.visits[+m.dataset.v];
+      tip.innerHTML = '<span class="ct-name">' + TL.V.species[v[0]][1] + '</span> ×' + v[3]
+        + '<span class="ct-w">' + tlVisitLabel(v) + '</span>';
+      tip.style.left = ev.clientX + 'px';
+      tip.style.top = ev.clientY + 'px';
+      tip.setAttribute('aria-hidden', 'false');
+    });
+    lanesGridEl.addEventListener('mouseleave', function () {
+      hideTip();
+      var body = document.getElementById('lanesBody');
+      if (body) body.classList.remove('tracking');
+    });
+    lanesGridEl.addEventListener('click', function (ev) {
+      if (!TL) return;
+      var m = ev.target.closest('.lane-mark');
+      if (m) {
+        hideTip();
+        var v = TL.V.visits[+m.dataset.v];
+        openDetailModal(TL.V.species[v[0]][0], {
+          from: tlStamp(v[1]), to: tlStamp(v[1] + v[2]), label: tlVisitLabel(v),
+        }, m);
+        return;
+      }
+      var id = ev.target.closest('.lane-id');
+      if (id) openDetailModal(TL.V.species[+id.dataset.lane][0], null, id);
+    });
+  })();
+
   function renderWindowDependent(animate) {
     // renderStatsLists runs BEFORE drawHistograms so the stats entrance
     // (fired at the end of drawHistograms) can stagger the side-panel rows
@@ -1416,12 +1620,14 @@
     renderStatsLists();
     drawHistograms(animate);
     renderAtlas(animate);
+    renderTimeline(animate);
   }
   function renderTimeIndependent(animate) {
     // Lists first, then the graph (see renderWindowDependent).
     renderStatsLists();
     drawHistograms(animate);
     renderAtlas(animate);
+    renderTimeline(animate);
   }
 
   function refreshRecent(animate) {
@@ -1430,10 +1636,13 @@
     // lands later - we discard the stale response so the collage
     // never reverts to a different window.
     var forHours = currentHours;
-    return fetchJson('./avian/api/birdnet-api.php?action=recent&hours=' + forHours)
-      .then(function (j) {
+    return Promise.all([
+      fetchJson('./avian/api/birdnet-api.php?action=recent&hours=' + forHours),
+      fetchJson('./avian/api/birdnet-api.php?action=visits&hours=' + forHours).catch(function () { return null; }),
+    ])
+      .then(function (parts) {
         if (forHours !== currentHours) return; // window changed mid-flight
-        DATA.recent = j; renderWindowDependent(animate);
+        DATA.recent = parts[0]; DATA.visits = parts[1]; renderWindowDependent(animate);
       })
       .catch(function (e) { console.warn('recent fetch failed', e); });
   }
@@ -1445,6 +1654,7 @@
       fetchJson('./avian/api/birdnet-api.php?action=timeseries&days=30').catch(function () { return null; }),
       fetchJson('./avian/api/birdnet-api.php?action=firstseen&limit=10').catch(function () { return null; }),
       fetchJson('./avian/api/birdnet-api.php?action=recent&hours=' + forHours).catch(function () { return null; }),
+      fetchJson('./avian/api/birdnet-api.php?action=visits&hours=' + forHours).catch(function () { return null; }),
     ]).then(function (parts) {
       DATA.stats = parts[0];
       DATA.lifelist = parts[1];
@@ -1453,6 +1663,7 @@
       // Only accept the recent slice if the window hasn't changed
       // since this poll started - otherwise keep what's there.
       if (forHours === currentHours && parts[4]) DATA.recent = parts[4];
+      if (forHours === currentHours && parts[5]) DATA.visits = parts[5];
       recomputeDerived();
       renderTimeIndependent(animate);
       renderCollageFromData(animate);
@@ -2057,8 +2268,32 @@
     var n = +pose || 1;
     return n > 1 ? base + '&pose=' + n : base;
   }
-  function openDetailModal(sci) {
+  // Recording rows for the modal list; the click / scrub wiring further
+  // down is delegated off #modalRecordings, so any list built from these
+  // plays and draws spectrograms the same way.
+  function recRowsHtml(dets) {
+    return dets.map(function (d) {
+      return '<li class="rec-row" data-file="' + (d.file || '') + '" data-date="' + (d.d || '') + '">'
+        + '<button class="play" type="button" aria-label="play">' + ICON_PLAY + '</button>'
+        + '<span class="when">' + fmtRecTime(d.d, d.t) + '<small>' + fmtDateLine(d.d, d.t) + '</small></span>'
+        + '<span class="conf">' + ((+d.conf || 0) * 100).toFixed(0) + '%</span>'
+        + '<div class="rec-spectro" aria-hidden="true">'
+        +   '<div class="rec-spectro-loading">loading spectrogram...</div>'
+        +   '<div class="rec-spectro-played"></div>'
+        +   '<div class="rec-spectro-cursor"></div>'
+        +   '<div class="rec-spectro-scrub" role="slider" aria-label="scrub" tabindex="0"></div>'
+        + '</div>'
+        + '</li>';
+    }).join('');
+  }
+  // visit (optional, from the timeline): { from, to, label } - the list
+  // opens on just that visit's recordings, with a link to the full list.
+  // sourceEl (optional): what to morph the card out of, when it isn't an
+  // atlas card.
+  var modalOpenSeq = 0;
+  function openDetailModal(sci, visit, sourceEl) {
     if (!sci) return;
+    var seq = ++modalOpenSeq;
     var modal = document.getElementById('detail-modal');
     var img = document.getElementById('modalImg');
     var poseToggle = document.getElementById('modalPoseToggle');
@@ -2142,9 +2377,9 @@
     // before we apply the initial transform - the browser skips
     // layout for opacity-0 trees, which would freeze the morph at the
     // starting frame.
-    var sourceCard = atlasGridEl
+    var sourceCard = sourceEl || (atlasGridEl
       ? atlasGridEl.querySelector('.bird-card[data-sci="' + sci.replace(/"/g, '\"') + '"]')
-      : null;
+      : null);
     modal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
     morphModalOpen(modal.querySelector('.modal-card'), sourceCard);
@@ -2156,7 +2391,13 @@
           SPECIES_CACHE[sci] = j;
           return j;
         });
-    loadSpecies.then(function (j) {
+    var loadVisit = visit
+      ? fetchJson('./avian/api/birdnet-api.php?action=species&sci=' + encodeURIComponent(sci)
+          + '&from=' + encodeURIComponent(visit.from) + '&to=' + encodeURIComponent(visit.to))
+      : Promise.resolve(null);
+    Promise.all([loadSpecies, loadVisit]).then(function (parts) {
+      if (seq !== modalOpenSeq) return;   // another bird opened meanwhile
+      var j = parts[0], v = parts[1];
       var s = j.summary || {};
       document.getElementById('modalCommon').textContent = s.com || sci;
       document.getElementById('modalAllTime').textContent = fmtN(+s.total || 0);
@@ -2168,22 +2409,21 @@
       rarEl.textContent = rar;
       if (rar === 'rare') rarEl.classList.add('rare');
       var dets = j.detections || [];
-      document.getElementById('modalRecCount').textContent = dets.length + ' captured';
-      document.getElementById('modalRecordings').innerHTML = dets.length
-        ? dets.map(function (d) {
-            return '<li class="rec-row" data-file="' + (d.file || '') + '" data-date="' + (d.d || '') + '">'
-              + '<button class="play" type="button" aria-label="play">' + ICON_PLAY + '</button>'
-              + '<span class="when">' + fmtRecTime(d.d, d.t) + '<small>' + fmtDateLine(d.d, d.t) + '</small></span>'
-              + '<span class="conf">' + ((+d.conf || 0) * 100).toFixed(0) + '%</span>'
-              + '<div class="rec-spectro" aria-hidden="true">'
-              +   '<div class="rec-spectro-loading">loading spectrogram...</div>'
-              +   '<div class="rec-spectro-played"></div>'
-              +   '<div class="rec-spectro-cursor"></div>'
-              +   '<div class="rec-spectro-scrub" role="slider" aria-label="scrub" tabindex="0"></div>'
-              + '</div>'
-              + '</li>';
-          }).join('')
-        : '<li class="rec-empty">No recordings yet.</li>';
+      var countEl = document.getElementById('modalRecCount');
+      var listEl = document.getElementById('modalRecordings');
+      function showAll() {
+        countEl.textContent = dets.length + ' captured';
+        listEl.innerHTML = dets.length ? recRowsHtml(dets) : '<li class="rec-empty">No recordings yet.</li>';
+      }
+      var vd = v && v.detections;
+      if (vd && vd.length) {
+        countEl.innerHTML = vd.length + (vd.length === 1 ? ' call' : ' calls') + ', ' + visit.label
+          + '<button type="button">show all</button>';
+        countEl.querySelector('button').addEventListener('click', function () { stopModalAudio(); showAll(); });
+        listEl.innerHTML = recRowsHtml(vd);
+      } else {
+        showAll();
+      }
     }).catch(function () {
       document.getElementById('modalRecordings').innerHTML = '<li class="rec-empty">Failed to load recordings.</li>';
     });
