@@ -1049,13 +1049,18 @@
     display: block; font: 9px ui-monospace, Menlo, monospace; color: var(--ink-soft);
     letter-spacing: 0.06em; margin: 0 0 0 12px;
   }
-  /* Room below the sort control for its hover tip. */
+  /* The control sits against the right edge, so its last tip hangs
+     left instead of centring (a centred one widens the page on phones). */
   #lanesSort .tip { z-index: 5; }
+  #lanesSort button:last-child .tip { left: auto; right: 0; transform: none; }
   .lanes-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-top: 18px; }
-  /* overflow: hidden keeps a bar at "now" (min-width 3px) or the
-     crosshair's time label at either edge from pushing out a scrollbar. */
-  .lanes-grid { --gut: 210px; position: relative; min-width: 640px; overflow: hidden; }
-  .lanes-axis { position: relative; height: 22px; margin-left: var(--gut); }
+  /* overflow: clip keeps a bar at "now" (min-width 3px) or the
+     crosshair's time label at either edge from pushing out a scrollbar.
+     Unlike hidden, clip doesn't make the grid a scroll container, so the
+     sticky names column below still sticks to .lanes-scroll. */
+  .lanes-grid { --gut: 210px; position: relative; min-width: 640px; overflow: clip; }
+  .lanes-axis { display: grid; grid-template-columns: var(--gut) minmax(0, 1fr); height: 22px; }
+  .lanes-ticks { position: relative; }
   .lanes-axis span {
     position: absolute; bottom: 7px; transform: translateX(-50%);
     font: 8px/1 "SF Mono", Menlo, monospace; color: var(--ink-soft); white-space: nowrap;
@@ -1078,11 +1083,18 @@
     transition: background 140ms ease;
   }
   .lane:hover { background: var(--paper-2); }
+  /* When the plot is wider than the screen (phones), only the time axis
+     scrolls: the names column and the corner above it stay put, opaque
+     over the bars and night bands sliding beneath them. */
+  .lanes-corner { position: sticky; left: 0; z-index: 4; background: var(--paper); }
   .lane-id {
+    position: sticky; left: 0; z-index: 4;
     display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 8px; align-items: center;
     height: 100%; padding-right: 14px; cursor: pointer;
-    background: none; border: 0; text-align: left; color: var(--ink);
+    background: var(--paper); border: 0; text-align: left; color: var(--ink); font: inherit;
+    transition: background 140ms ease;
   }
+  .lane:hover .lane-id { background: var(--paper-2); }
   .lane-id img {
     width: 40px; height: 30px; object-fit: contain; display: block;
     filter: drop-shadow(0 1px 3px rgba(26,22,18,0.10));
@@ -1142,10 +1154,16 @@
   @media (prefers-reduced-motion: reduce) { .lane.entering { animation: none; } }
   @media (max-width: 700px) {
     .lanes-grid { --gut: 132px; }
+    /* A rule down the edge the plot slides under. */
+    .lane-id, .lanes-corner { box-shadow: inset -1px 0 0 var(--hairline); }
     .lane-id { grid-template-columns: 30px minmax(0, 1fr); }
     .lane-id img { width: 30px; height: 24px; }
     .lane-id .ct { display: none; }
-    .lane-id b { font-size: 11px; }
+    /* Two lines instead of an ellipsis: "Eurasian Magpie" fits, "Eurasian M..." doesn't tell you much. */
+    .lane-id b {
+      font-size: 11px; line-height: 1.1; white-space: normal;
+      display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    }
   }
 
   /* Recordings narrowed to one timeline visit: the count line carries a

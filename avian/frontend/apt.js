@@ -1533,10 +1533,10 @@
 
     TL = { V: V, t0: t0, span: span };
     lanesGridEl.innerHTML =
-        '<div class="lanes-axis">' + top + '</div>'
+        '<div class="lanes-axis"><i class="lanes-corner"></i><div class="lanes-ticks">' + top + '</div></div>'
       + '<div class="lanes-body" id="lanesBody"><div class="lanes-bg">' + bg
       +   '<i class="lanes-crosshair" id="lanesCrosshair"><span></span></i></div>' + lanes + '</div>'
-      + '<div class="lanes-axis bottom">' + bottom + '</div>';
+      + '<div class="lanes-axis bottom"><i class="lanes-corner"></i><div class="lanes-ticks">' + bottom + '</div></div>';
     if (summaryEl) {
       summaryEl.textContent = fmtN(total) + ' detections · ' + rows.length + ' species · '
         + visits.length + ' visits · a new bar after ' + Math.round((V.gap || 300) / 60) + ' min quiet';
