@@ -182,6 +182,22 @@
   }
   .menu-btn:hover { transform: translateY(-1px); }
   .menu-btn:active { transform: translateY(0); }
+  /* Data-age / update note, centred under the top bar. Quiet while it only
+     reports ("as of 14:02"); raised like the menu pill when it's a button. */
+  .net-note {
+    position: fixed; top: 64px; left: 50%; transform: translateX(-50%);
+    z-index: 30; border: 0; border-radius: 999px;
+    padding: 6px 12px 5px; background: var(--paper-2); color: var(--ink-soft);
+    font: 10px/1 ui-monospace, Menlo, monospace; letter-spacing: 0.14em;
+    text-transform: lowercase; white-space: nowrap; box-shadow: var(--recess);
+    animation: stats-fade-in 240ms ease both;
+  }
+  .net-note[data-state="update"] {
+    background: var(--paper); color: var(--ink); box-shadow: var(--raised); cursor: pointer;
+  }
+  .net-note:disabled { cursor: default; }
+  html.kiosk .net-note { display: none; }
+  @media (max-width: 700px) { .net-note { top: 48px; font-size: 9px; } }
   /* Compact top bar on mobile - the time-window pill goes from
      spacious to thumb-tight without losing legibility. */
   @media (max-width: 700px) {

@@ -6,7 +6,11 @@
 <title>your birds</title>
 <meta name="description" content="A live bird collage from your window.">
 <link rel="icon" type="image/png" href="./favicon.png">
-<link rel="apple-touch-icon" href="./favicon.png">
+<link rel="apple-touch-icon" href="./avian/assets/icons/icon-180.png">
+<link rel="manifest" href="./avian/frontend/manifest.json">
+<meta name="theme-color" content="#fcfcfb" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#17181c" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-title" content="Birds">
 <!-- Apply the saved theme before first paint so dark mode doesn't flash
      light on load. The full switcher lives in Settings (writes bird:theme).
      ?kiosk=1 (external screenshot mode, e.g. byos_next driving an e-ink
@@ -16,7 +20,7 @@
      bulk of the page) has downloaded; apt.js's fetchJson picks these up
      by URL. The window matches apt.js: ?hours= in kiosk, else bird:window. -->
 <script>try{(function(){var sp=new URLSearchParams(location.search),h=sp.has('kiosk')&&+sp.get('hours')?+sp.get('hours'):(+localStorage.getItem('bird:window')||24),a='./avian/api/birdnet-api.php?action=';window.__early={};['stats','lifelist','timeseries&days=30','firstseen&limit=10','recent&hours='+h,'visits&hours='+h,'masks&hours='+h].forEach(function(q){window.__early[a+q]=fetch(a+q,{cache:'no-store'});});})();}catch(e){}</script>
-<link rel="stylesheet" href="./styles.css?v=20260930f">
+<link rel="stylesheet" href="./styles.css?v=20260930h">
 </head>
 <body class="av-local">
 <!-- The cream paper edge styles.css draws round each bird on a dark ground:
@@ -53,6 +57,9 @@
   </div>
   <button class="menu-btn" id="menuBtn">menu</button>
 </header>
+<!-- Data age when the Pi is slow or unreachable, or a deploy waiting for a
+     reload (see the service worker notes in apt.js). -->
+<button class="net-note" id="netNote" type="button" hidden></button>
 
 <aside id="menu-dd" aria-hidden="true">
   <div id="dd-locked">
@@ -274,7 +281,7 @@
   </div>
 </section>
 
-<script src="./avian/frontend/round-fit.js?v=20260930f"></script>
-<script src="./apt.js?v=20260930f"></script>
+<script src="./avian/frontend/round-fit.js?v=20260930h"></script>
+<script src="./apt.js?v=20260930h"></script>
 </body>
 </html>

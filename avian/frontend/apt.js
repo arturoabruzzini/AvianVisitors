@@ -1014,12 +1014,17 @@
     // index.html starts the first load's API calls before this script has
     // finished downloading; take those responses rather than asking again.
     var early = window.__early && window.__early[url];
-    if (early) {
-      delete window.__early[url];
-      return early.then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); });
-    }
-    return fetch(url, { cache: 'no-store' })
-      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); });
+    if (early) delete window.__early[url];
+    return (early || fetch(url, { cache: 'no-store' })).then(function (r) {
+      if (!r.ok) return Promise.reject(r.status);
+      // The service worker answers from its cache when the Pi can't be
+      // reached, and says so; remember that on the data itself.
+      var cached = r.headers.get('X-AV-Cached') === '1';
+      return r.json().then(function (j) {
+        if (cached && j && typeof j === 'object') Object.defineProperty(j, 'fromCache', { value: true });
+        return j;
+      });
+    });
   }
 
   function backfillDaily(daily, days) {
@@ -1743,10 +1748,11 @@
       recentP,
       fetchJson('./avian/api/birdnet-api.php?action=visits&hours=' + forHours).catch(function () { return null; }),
     ]).then(function (parts) {
-      DATA.stats = parts[0];
-      DATA.lifelist = parts[1];
-      DATA.timeseries = parts[2];
-      DATA.firstseen = parts[3];
+      // A failed call (Pi unreachable, nothing cached) keeps what's shown.
+      if (parts[0]) DATA.stats = parts[0];
+      if (parts[1]) DATA.lifelist = parts[1];
+      if (parts[2]) DATA.timeseries = parts[2];
+      if (parts[3]) DATA.firstseen = parts[3];
       // Only accept the recent slice if the window hasn't changed
       // since this poll started - otherwise keep what's there.
       if (forHours === currentHours && parts[4]) DATA.recent = parts[4];
@@ -1754,13 +1760,95 @@
       recomputeDerived();
       renderTimeIndependent(animate);
       if (!drewCollage) renderCollageFromData(animate);
+      if (forHours === currentHours) netStatus(parts[4] && !parts[4].fromCache);
     });
+  }
+
+  // ---- Offline + fast return visits (service worker) ----
+  // sw.js keeps the last good response for each API URL. On a return visit
+  // the page draws from those straight away (with the bloom), and the
+  // network refresh below then updates it quietly, like the 30s poll. With
+  // the Pi unreachable, that cached data is all there is, and the note at
+  // the top says how old it is.
+  var API_CACHE = 'av-api-v1'; // must match sw.js
+  function bootFromCache() {
+    if (IS_KIOSK || !window.caches || !navigator.serviceWorker || !navigator.serviceWorker.controller) {
+      return Promise.resolve(false);
+    }
+    var a = './avian/api/birdnet-api.php?action=';
+    var qs = ['stats', 'lifelist', 'timeseries&days=30', 'firstseen&limit=10',
+              'recent&hours=' + currentHours, 'visits&hours=' + currentHours, 'masks&hours=' + currentHours];
+    return caches.open(API_CACHE).then(function (c) {
+      return Promise.all(qs.map(function (q) {
+        return c.match(new URL(a + q, location.href).href).then(function (r) { return r ? r.json() : null; });
+      }));
+    }).then(function (p) {
+      if (!p[4]) return false;
+      if (p[6]) { addMasks(p[6]); masksBooted = true; }
+      DATA.stats = p[0]; DATA.lifelist = p[1]; DATA.timeseries = p[2]; DATA.firstseen = p[3];
+      DATA.recent = p[4]; DATA.visits = p[5];
+      recomputeDerived();
+      renderTimeIndependent(true);
+      renderCollageFromData(true);
+      // Only mention it if the Pi is slow to answer.
+      netStaleT = setTimeout(function () { showNetNote('stale'); }, 2500);
+      return true;
+    }).catch(function () { return false; });
+  }
+
+  var netNoteEl = document.getElementById('netNote');
+  var netStaleT = null, netState = null;
+  function asOfLabel() {
+    var d = new Date((DATA.recent && DATA.recent.as_of) || '');
+    if (isNaN(d)) return '';
+    var t = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    return new Date().toDateString() === d.toDateString() ? t
+      : d.toLocaleDateString(undefined, { weekday: 'short' }) + ' ' + t;
+  }
+  function showNetNote(state) {
+    if (!netNoteEl || netState === 'update') return; // an update outranks the rest
+    netState = state;
+    if (!state) { netNoteEl.hidden = true; return; }
+    netNoteEl.textContent = state === 'update' ? 'updated · tap to reload'
+      : (state === 'offline' ? 'offline · ' : '') + 'as of ' + asOfLabel();
+    netNoteEl.disabled = state !== 'update';
+    netNoteEl.setAttribute('data-state', state);
+    netNoteEl.hidden = false;
+  }
+  function netStatus(fresh) {
+    clearTimeout(netStaleT);
+    showNetNote(fresh ? null : (DATA.recent ? 'offline' : null));
+  }
+  if (netNoteEl) netNoteEl.addEventListener('click', function () {
+    if (netState === 'update') location.reload();
+  });
+
+  // Deploys: sw.js serves the page from its cache and refreshes that copy in
+  // the background, so a new version lands one visit late. Ask it which
+  // apt.js the newest page loads; if that isn't this one, offer a reload.
+  var APP_V = ((document.querySelector('script[src*="apt.js"]') || {}).src || '').replace(/^.*[?&]v=/, '');
+  function checkForUpdate() {
+    var sw = navigator.serviceWorker && navigator.serviceWorker.controller;
+    if (!sw || !window.MessageChannel || !APP_V) return;
+    var ch = new MessageChannel();
+    ch.port1.onmessage = function (e) {
+      if (e.data && e.data.v && e.data.v !== APP_V) {
+        netState = null;
+        showNetNote('update');
+      }
+    };
+    sw.postMessage({ type: 'version?' }, [ch.port2]);
+  }
+  if (!IS_KIOSK && 'serviceWorker' in navigator && window.isSecureContext) {
+    navigator.serviceWorker.register('./sw.js').catch(function (e) { console.warn('sw', e); });
+    setTimeout(checkForUpdate, 4000);
   }
 
   // Kick off the initial fetch. Renders pull from DATA as soon as it
   // populates; until then the page sits with empty histograms + lists.
-  // animate=true so the collage blooms in on first load.
-  refreshAll(true);
+  // animate=true so the collage blooms in on first load - unless it
+  // already bloomed from the cache, when the fresh data slots in quietly.
+  bootFromCache().then(function (fromCache) { refreshAll(!fromCache); });
 
   // Hook into the window picker so the data refetches on change. Pass
   // animate=true so the collage blooms (the silent poll passes nothing).
@@ -1790,9 +1878,11 @@
       stopPolling();
     } else {
       // Force an immediate refresh on return so the user sees fresh
-      // data right away, then resume normal polling cadence.
+      // data right away, then resume normal polling cadence. A phone can
+      // keep the tab for days, so look for a deploy then too.
       refreshAll();
       startPolling();
+      checkForUpdate();
     }
   });
   startPolling();

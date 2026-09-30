@@ -81,6 +81,8 @@ create_necessary_dirs() {
     sudo -u ${USER} ln -fs $my_dir/avian/frontend/index.html ${EXTRACTED}/index.html
     sudo -u ${USER} ln -fs $my_dir/avian/frontend/styles.css ${EXTRACTED}/styles.css
     sudo -u ${USER} ln -fs $my_dir/avian/frontend/apt.js    ${EXTRACTED}/apt.js
+    # The service worker has to sit at the root to control the page.
+    sudo -u ${USER} ln -fs $my_dir/avian/frontend/sw.js     ${EXTRACTED}/sw.js
     sudo -u ${USER} ln -fs $my_dir/avian/frontend/masks.json ${EXTRACTED}/masks.json
     sudo -u ${USER} ln -fs $my_dir/avian/frontend/dims.json  ${EXTRACTED}/dims.json
     sudo -u ${USER} ln -fs $my_dir/avian/assets/favicon.png  ${EXTRACTED}/favicon.png
