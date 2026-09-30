@@ -189,6 +189,17 @@ install_Caddyfile() {
   cat << EOF > /etc/caddy/Caddyfile
 http:// ${BIRDNETPI_URL} {
   root * ${EXTRACTED}
+  # AvianVisitors: compress text (the page's JS/CSS/JSON), keep ?v=
+  # versioned assets for a year, and always revalidate the page itself so
+  # a deploy shows up on the next load. The Pi's Wi-Fi can be very slow.
+  encode zstd gzip
+  @versioned {
+    path *.js *.css
+    query v=*
+  }
+  header @versioned Cache-Control "public, max-age=31536000, immutable"
+  @page path / /index.html
+  header @page Cache-Control "no-cache"
   file_server browse
   handle /By_Date/* {
     file_server browse
@@ -231,6 +242,17 @@ EOF
     cat << EOF > /etc/caddy/Caddyfile
 http:// ${BIRDNETPI_URL} {
   root * ${EXTRACTED}
+  # AvianVisitors: compress text (the page's JS/CSS/JSON), keep ?v=
+  # versioned assets for a year, and always revalidate the page itself so
+  # a deploy shows up on the next load. The Pi's Wi-Fi can be very slow.
+  encode zstd gzip
+  @versioned {
+    path *.js *.css
+    query v=*
+  }
+  header @versioned Cache-Control "public, max-age=31536000, immutable"
+  @page path / /index.html
+  header @page Cache-Control "no-cache"
   file_server browse
   handle /By_Date/* {
     file_server browse

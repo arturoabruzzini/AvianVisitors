@@ -39,12 +39,60 @@ $pose = (int)($_GET['pose'] ?? 1);
 if ($pose < 1 || $pose > 99) $pose = 1;
 $poseSuffix = $pose === 1 ? '' : "-$pose";
 
-function serve_png(string $path): void {
-    header('Content-Type: image/png');
-    header('Cache-Control: public, max-age=86400');
+// ?w= asks for a smaller copy (longest edge, snapped to a few sizes so the
+// cache stays bounded), and browsers that accept WebP get WebP: a bundled
+// 560px PNG is ~350 KB, the same bird as WebP ~45 KB, and ~12 KB at 240px.
+// That matters on a Pi whose Wi-Fi uplink can sit under 100 KB/s.
+// Derivatives are made once with GD and kept beside the rembg cache.
+$want = (int)($_GET['w'] ?? 0);
+$width = 0;
+foreach ([120, 240, 400] as $b) { if ($want > 0 && $want <= $b) { $width = $b; break; } }
+$accept = (string)($_SERVER['HTTP_ACCEPT'] ?? '');
+$webp = strpos($accept, 'image/webp') !== false && function_exists('imagewebp');
+$cacheDir = dirname(__DIR__, 3) . '/BirdSongs/Extracted/cutouts';
+
+function send_file(string $path, string $type): void {
+    header('Content-Type: ' . $type);
+    // Every URL carries &v=<render version>, so a given URL never changes.
+    header('Cache-Control: public, max-age=31536000, immutable');
+    header('Vary: Accept');
     header('Content-Length: ' . (string)filesize($path));
-    readfile($path);
+    if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'HEAD') readfile($path);
     exit;
+}
+
+function serve_png(string $path): void {
+    global $width, $webp, $cacheDir;
+    if (!$width && !$webp) send_file($path, 'image/png');
+    $ext = $webp ? 'webp' : 'png';
+    $dir = "$cacheDir/derived";
+    $out = $dir . '/' . basename($path, '.png') . '-' . substr(md5($path . '|' . filemtime($path)), 0, 8)
+         . '-' . ($width ?: 'full') . ".$ext";
+    if (is_file($out)) send_file($out, "image/$ext");
+    $im = @imagecreatefrompng($path);
+    if ($im === false) send_file($path, 'image/png');
+    $w = imagesx($im); $h = imagesy($im);
+    if ($width && max($w, $h) > $width) {
+        $scale = $width / max($w, $h);
+        $nw = max(1, (int)round($w * $scale)); $nh = max(1, (int)round($h * $scale));
+        $small = imagecreatetruecolor($nw, $nh);
+        imagealphablending($small, false);
+        imagesavealpha($small, true);
+        imagefill($small, 0, 0, imagecolorallocatealpha($small, 0, 0, 0, 127));
+        imagecopyresampled($small, $im, 0, 0, 0, 0, $nw, $nh, $w, $h);
+        imagedestroy($im);
+        $im = $small;
+    }
+    imagesavealpha($im, true);
+    if (!is_dir($dir)) @mkdir($dir, 0755, true);
+    $tmp = "$out." . getmypid() . '.tmp';
+    $ok = $webp ? @imagewebp($im, $tmp, 82) : @imagepng($im, $tmp, 9);
+    imagedestroy($im);
+    // Write-then-rename so a concurrent request never reads half a file;
+    // if the cache dir isn't writable, fall back to the original PNG.
+    if ($ok && @rename($tmp, $out)) send_file($out, "image/$ext");
+    @unlink($tmp);
+    send_file($path, 'image/png');
 }
 
 // 1. Bundled illustration with pose suffix (the kachō-e PNG the repo
@@ -69,7 +117,6 @@ if (is_file($cutout) && filesize($cutout) > 1024) {
 }
 
 // 3. Dynamic cache from a previous Wikipedia + rembg run.
-$cacheDir = dirname(__DIR__, 3) . '/BirdSongs/Extracted/cutouts';
 $cachePath = "$cacheDir/$slug.png";
 if (is_file($cachePath) && filesize($cachePath) > 1024) {
     serve_png($cachePath);

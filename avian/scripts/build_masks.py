@@ -4,9 +4,11 @@
 Step 3 of the illustration pipeline (after pregen.py and cutout.py).
 
 The collage packs birds by their actual silhouette, not bounding boxes,
-so the frontend ships a tiny 1-bit mask per illustration inlined in
-apt.js. This reads every cutout in avian/assets/illustrations/ and
-rewrites the DIMS and MASKS tables in avian/frontend/apt.js:
+so the frontend needs a tiny 1-bit mask per illustration. This reads
+every cutout in avian/assets/illustrations/, rewrites the DIMS table
+inlined in avian/frontend/apt.js, and writes the masks (and a copy of
+DIMS) to avian/frontend/masks.json / dims.json. The page fetches only
+the masks it needs through birdnet-api.php?action=masks:
 
     DIMS[slug]  = [w, h]  aspect, scaled so the long side is 560
     MASKS[slug] = {w, h, bits}  silhouette downscaled to <=93px, 1-bit
@@ -18,7 +20,7 @@ Run after changing the illustration set, then bump SKETCH_VERSION and
 IMG_VERSION in apt.js so browsers drop their cached copies.
 
 Usage:
-    python3 build_masks.py            # rewrite apt.js in place
+    python3 build_masks.py            # rewrite apt.js + masks.json
     python3 build_masks.py --check    # report only, don't write
 """
 from __future__ import annotations
@@ -79,8 +81,10 @@ def main() -> int:
                     help="Cutout directory (default: avian/assets/illustrations/)")
     ap.add_argument("--apt", type=Path, default=here / "frontend" / "apt.js",
                     help="Frontend file to patch (default: avian/frontend/apt.js)")
+    ap.add_argument("--masks", type=Path, default=here / "frontend" / "masks.json",
+                    help="Mask table to write (default: avian/frontend/masks.json)")
     ap.add_argument("--check", action="store_true",
-                    help="Report counts and don't write apt.js")
+                    help="Report counts and don't write anything")
     args = ap.parse_args()
 
     dims, masks = build_tables(args.illustrations)
@@ -110,9 +114,10 @@ def main() -> int:
 
     src = args.apt.read_text()
     src = replace_decl(src, "DIMS", dims_json)
-    src = replace_decl(src, "MASKS", masks_json)
     args.apt.write_text(src)
-    print(f"patched {args.apt}\nremember to bump SKETCH_VERSION + IMG_VERSION in apt.js")
+    args.masks.write_text(masks_json)
+    args.masks.with_name("dims.json").write_text(dims_json)
+    print(f"patched {args.apt}, wrote {args.masks}\nremember to bump SKETCH_VERSION + IMG_VERSION in apt.js")
     return 0
 
 

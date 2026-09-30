@@ -12,6 +12,7 @@
 //                 sunrise / sunset for each day it covers
 //   timeseries  - &days=N: daily detection counts per species
 //   firstseen   - every species' earliest detection
+//   masks       - &hours=N or &slugs=a,b: collage silhouette masks
 //
 // Default LAN deploy ships without auth. If you've exposed the Pi via
 // Cloudflare or a tunnel, add a Caddy `basic_auth` matcher around the
@@ -103,28 +104,54 @@ switch ($action) {
         $hours = max(1, min(1000000, (int)($_GET['hours'] ?? 24)));
         // species-collapsed view: one row per species seen in the window,
         // with the file of its highest-confidence detection inside the window.
+        // Two grouped passes (this was a query per species, each scanning the
+        // table): SQLite fills the bare File_Name / Date / Time from the row
+        // holding MAX(Confidence) when that is the only min/max aggregate, so
+        // last_seen comes from its own pass. The Date bound uses the index.
+        $in = "FROM detections WHERE Date >= DATE('now','localtime',:back) "
+            . "AND (julianday('now','localtime') - julianday(Date||' '||Time)) * 24 <= :hrs GROUP BY Sci_Name";
         $rs = rows($db,
-          "SELECT Sci_Name AS sci, Com_Name AS com, COUNT(*) AS n, MAX(Confidence) AS best_conf, "
-        . "       MAX(Date||' '||Time) AS last_seen "
-        . "FROM detections "
-        . "WHERE (julianday('now','localtime') - julianday(Date||' '||Time)) * 24 <= :hrs "
-        . "GROUP BY Sci_Name ORDER BY last_seen DESC",
-          [':hrs' => $hours]
+          "SELECT b.sci, b.com, b.n, b.best_conf, l.last_seen, b.top_file, b.top_at FROM "
+        . "(SELECT Sci_Name AS sci, Com_Name AS com, COUNT(*) AS n, MAX(Confidence) AS best_conf, "
+        . "        File_Name AS top_file, Date||' '||Time AS top_at $in) b "
+        . "JOIN (SELECT Sci_Name AS sci, MAX(Date||' '||Time) AS last_seen $in) l USING (sci) "
+        . "ORDER BY l.last_seen DESC",
+          [':hrs' => $hours, ':back' => '-' . (intdiv($hours, 24) + 1) . ' days']
         );
-        // for each row, attach the file of the top-confidence detection in the window
-        foreach ($rs as &$r) {
-            $best = one($db,
-              "SELECT File_Name AS file, Date AS d, Time AS t, Confidence AS conf "
-            . "FROM detections "
-            . "WHERE Sci_Name = :sn "
-            . "AND (julianday('now','localtime') - julianday(Date||' '||Time)) * 24 <= :hrs "
-            . "ORDER BY Confidence DESC LIMIT 1",
-              [':sn' => $r['sci'], ':hrs' => $hours]
-            );
-            $r['top_file'] = $best['file'] ?? null;
-            $r['top_at']   = isset($best['d']) ? ($best['d'].' '.$best['t']) : null;
-        }
         echo json_encode(['hours' => $hours, 'species' => $rs, 'as_of' => date('c')]);
+        break;
+    }
+
+    case 'masks': {
+        // Collage silhouettes (see avian/scripts/build_masks.py) for just the
+        // birds on screen, rather than all ~340 shipped inside apt.js: that
+        // was 75 KB compressed on every cold load, over a slow Pi uplink.
+        // &hours=N: every species in that window (perched + flight), which
+        // the page asks for alongside `recent` so neither waits on the other.
+        // &slugs=a,b: specific ones, for birds that turn up later.
+        $all = json_decode((string)@file_get_contents(dirname(__DIR__) . '/frontend/masks.json'), true) ?: [];
+        $want = [];
+        if (isset($_GET['slugs'])) {
+            foreach (explode(',', (string)$_GET['slugs']) as $s) {
+                if (preg_match('/^[a-z0-9]+(?:-[a-z0-9]+)*$/', $s)) $want[] = $s;
+            }
+        } else {
+            $hours = max(1, min(1000000, (int)($_GET['hours'] ?? 24)));
+            $rs = rows($db,
+              "SELECT DISTINCT Sci_Name AS sci FROM detections "
+            . "WHERE Date >= DATE('now','localtime',:back) "
+            . "AND (julianday('now','localtime') - julianday(Date||' '||Time)) * 24 <= :hrs",
+              [':hrs' => $hours, ':back' => '-' . (intdiv($hours, 24) + 1) . ' days']
+            );
+            foreach ($rs as $r) {
+                $slug = trim((string)preg_replace('/[^a-z0-9]+/', '-', strtolower($r['sci'])), '-');
+                $want[] = $slug;
+                $want[] = "$slug-2";
+            }
+        }
+        $out = [];
+        foreach ($want as $s) if (isset($all[$s])) $out[$s] = $all[$s];
+        echo json_encode((object)$out);
         break;
     }
 
@@ -182,9 +209,10 @@ switch ($action) {
           "SELECT Sci_Name AS sci, Com_Name AS com, Confidence AS conf, "
         . "       CAST(strftime('%s', Date||' '||Time) AS INT) AS t "
         . "FROM detections "
-        . ($all ? "" : "WHERE (julianday('now','localtime') - julianday(Date||' '||Time)) * 24 <= :hrs ")
+        . ($all ? "" : "WHERE Date >= DATE('now','localtime',:back) "
+                     . "AND (julianday('now','localtime') - julianday(Date||' '||Time)) * 24 <= :hrs ")
         . "ORDER BY Sci_Name, Date, Time",
-          $all ? [] : [':hrs' => $hours]
+          $all ? [] : [':hrs' => $hours, ':back' => '-' . (intdiv($hours, 24) + 1) . ' days']
         );
         // Compact rows - the ALL window runs to thousands of visits and the
         // Pi's link is slow. species: [sci, com]; visits: [species index,
@@ -196,7 +224,7 @@ switch ($action) {
         foreach ($rs as $r) {
             $t = (int)$r['t'];
             $pct = (int)round($r['conf'] * 100);
-            if ($cur && $cur[0] === $spIdx[$r['sci']] && $t - $cur[5] <= $VISIT_GAP) {
+            if ($cur && $cur[0] === ($spIdx[$r['sci']] ?? -1) &&$t - $cur[5] <= $VISIT_GAP) {
                 $cur[5] = $t;
                 $cur[3]++;
                 if ($pct > $cur[4]) $cur[4] = $pct;
