@@ -16,7 +16,7 @@
      bulk of the page) has downloaded; apt.js's fetchJson picks these up
      by URL. The window matches apt.js: ?hours= in kiosk, else bird:window. -->
 <script>try{(function(){var sp=new URLSearchParams(location.search),h=sp.has('kiosk')&&+sp.get('hours')?+sp.get('hours'):(+localStorage.getItem('bird:window')||24),a='./avian/api/birdnet-api.php?action=';window.__early={};['stats','lifelist','timeseries&days=30','firstseen&limit=10','recent&hours='+h,'visits&hours='+h,'masks&hours='+h].forEach(function(q){window.__early[a+q]=fetch(a+q,{cache:'no-store'});});})();}catch(e){}</script>
-<link rel="stylesheet" href="./styles.css?v=20260930e">
+<link rel="stylesheet" href="./styles.css?v=20260930f">
 </head>
 <body class="av-local">
 <!-- The cream paper edge styles.css draws round each bird on a dark ground:
@@ -274,7 +274,7 @@
   </div>
 </section>
 
-<script src="./avian/frontend/round-fit.js?v=20260930e"></script>
-<script src="./apt.js?v=20260930e"></script>
+<script src="./avian/frontend/round-fit.js?v=20260930f"></script>
+<script src="./apt.js?v=20260930f"></script>
 </body>
 </html>

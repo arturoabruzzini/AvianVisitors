@@ -135,13 +135,15 @@
   var currentView = 0;                // collage shows first (no go() needed)
   function go(i) {
     i = Math.max(0, Math.min(btns.length - 1, i));
-    // Only a genuine view *switch* replays the entrance. go() also fires when
-    // a card is expanded (it sets the #sci= hash, which routes through go(2))
-    // while already on the atlas - that must not retrigger the load-in.
+    // Only a genuine view *switch* replays the entrance; re-selecting the
+    // current view doesn't retrigger the load-in.
     var switching = (i !== currentView);
     currentView = i;
     releaseViewImgs(i);
     views.style.transform = 'translateX(-' + (i * 100) + '%)';
+    // The strip is positioned by transform alone; a scrollIntoView can nudge
+    // its clipped parent sideways, which would leave it out of step.
+    views.scrollLeft = 0; if (views.parentNode) views.parentNode.scrollLeft = 0;
     btns.forEach(function (b, j) { b.setAttribute('aria-current', j === i ? 'true' : 'false'); });
     syncPill(slider);
     setTitleForView(i);
@@ -879,8 +881,8 @@
   collage.addEventListener('click', function (ev) {
     var hit = maskHitTest(ev.clientX, ev.clientY);
     if (!hit) return;
+    pendingModalSource = hit.el;
     location.hash = '#sci=' + encodeURIComponent(hit.data.sci);
-    go(2);
   });
 
   // Debug hook - call __layout({ slugs, weights, n }) from devtools to
@@ -2235,7 +2237,9 @@
       card.setAttribute('data-active', 'true');
       card.setAttribute('data-pulse', 'true');
       setTimeout(function () { card.removeAttribute('data-pulse'); }, 520);
-      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Only when the atlas is on screen: from another view this would scroll
+      // the clipped strip of views sideways, out of step with the tab bar.
+      if (currentView === 2) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
     })();
   }
 
@@ -2376,6 +2380,14 @@
   // sourceEl (optional): what to morph the card out of, when it isn't an
   // atlas card.
   var modalOpenSeq = 0;
+  // Opening a bird never changes the view: the card morphs out of whatever
+  // was clicked (pendingModalSource, set just before the #sci= hash) and
+  // back into it on close. Failing that, the same bird in the view on screen.
+  var pendingModalSource = null, modalSourceEl = null;
+  function viewBirdEl(sci) {
+    var view = document.getElementById('v' + currentView);
+    return sci && view ? view.querySelector('[data-sci="' + sci.replace(/"/g, '\\"') + '"]') : null;
+  }
   function openDetailModal(sci, visit, sourceEl) {
     if (!sci) return;
     var seq = ++modalOpenSeq;
@@ -2436,9 +2448,9 @@
     // before we apply the initial transform - the browser skips
     // layout for opacity-0 trees, which would freeze the morph at the
     // starting frame.
-    var sourceCard = sourceEl || (atlasGridEl
-      ? atlasGridEl.querySelector('.bird-card[data-sci="' + sci.replace(/"/g, '\"') + '"]')
-      : null);
+    var sourceCard = sourceEl || pendingModalSource || viewBirdEl(sci);
+    pendingModalSource = null;
+    modalSourceEl = sourceCard;
     modal.setAttribute('aria-hidden', 'false');
     document.body.style.overflow = 'hidden';
     morphModalOpen(modal.querySelector('.modal-card'), sourceCard);
@@ -2511,9 +2523,8 @@
     // fresh - the user may have switched the time window or sort
     // since opening the modal, so the source card may have moved.
     var sci = (document.getElementById('modalSci').textContent || '').trim();
-    var sourceCard = sci && atlasGridEl
-      ? atlasGridEl.querySelector('.bird-card[data-sci="' + sci.replace(/"/g, '\"') + '"]')
-      : null;
+    var sourceCard = modalSourceEl && document.contains(modalSourceEl) ? modalSourceEl : viewBirdEl(sci);
+    modalSourceEl = null;
     morphModalClose(modal.querySelector('.modal-card'), sourceCard, function () {
       modal.setAttribute('aria-hidden', 'true');
       document.body.style.overflow = '';
@@ -2988,7 +2999,7 @@
 
   // Initial load: if URL has a sci hash, jump to atlas, highlight, and
   // open the modal.
-  if (readHash()) { go(2); highlightAtlas(readHash()); openDetailModal(readHash()); }
+  if (readHash()) { highlightAtlas(readHash()); openDetailModal(readHash()); }
   // Admin overlay routing: #admin=system|logs|tools opens the admin
   // screen with that sub-tab. Clearing the hash closes it.
   function readAdminHash() {
@@ -3006,7 +3017,7 @@
     if (location.hash === '#about') openAbout(); else closeAbout();
     if (adm) { openAdmin(adm); return; }
     closeAdmin();
-    if (sci) { go(2); highlightAtlas(sci); openDetailModal(sci); }
+    if (sci) { highlightAtlas(sci); openDetailModal(sci); }
     else     { highlightAtlas(null); closeDetailModal(); }
   }
   if (readAdminHash()) openAdmin(readAdminHash());
@@ -3409,13 +3420,14 @@
   // first detections), stats timeline squares, and any future surface
   // that wants to point at a bird. Action chips inside cards stop
   // propagation themselves.
-  function jumpToSci(sci) {
+  function jumpToSci(sci, el) {
     if (!sci) return;
+    pendingModalSource = el || null;
     if (location.hash !== '#sci=' + encodeURIComponent(sci)) {
       location.hash = '#sci=' + encodeURIComponent(sci);
     } else {
       // Same hash -> still re-highlight (the user clicked it again).
-      go(2); highlightAtlas(sci);
+      highlightAtlas(sci);
     }
   }
   document.addEventListener('click', function (ev) {
@@ -3423,12 +3435,12 @@
     var card = ev.target.closest('.bird-card');
     if (card) {
       if (ev.target.closest('.actions, .spectro-wrap')) return;
-      return jumpToSci(card.dataset.sci);
+      return jumpToSci(card.dataset.sci, card);
     }
     var row = ev.target.closest('li[data-sci]');
-    if (row) return jumpToSci(row.dataset.sci);
+    if (row) return jumpToSci(row.dataset.sci, row);
     var tlCol = ev.target.closest('.stats-tl-col[data-sci]');
-    if (tlCol) return jumpToSci(tlCol.dataset.sci);
+    if (tlCol) return jumpToSci(tlCol.dataset.sci, tlCol);
   });
 
   // After the atlas re-renders (window change, fresh fetch), re-apply
