@@ -21,8 +21,11 @@ tmp="$(mktemp "$(dirname "$OUT")/.render.XXXXXX.png")"
 trap 'rm -f "$tmp"' EXIT
 
 start=$(date +%s)
-# The background colour must be hex RGBA: Chromium rejects a bare 0.
+# The background colour must be hex RGBA: Chromium rejects a bare 0. The page
+# lays out at 800 CSS px but is captured at 2x (1600 px), so a full-width phone
+# widget stays sharp; the phone downscales its copy for the watch.
 timeout "$RENDER_TIMEOUT" chromium-headless-shell --screenshot="$tmp" --window-size=800,800 \
+  --force-device-scale-factor=2 \
   --default-background-color=00000000 --hide-scrollbars --virtual-time-budget=8000 \
   "$URL" >/dev/null 2>&1
 
